@@ -223,9 +223,9 @@ void app_main(void)
     event_log_init(NULL);
 
     labguard_net_config_t net_config = {
-        .wifi_ssid = "CONFIGURE_ME",
-        .wifi_password = "CONFIGURE_ME",
-        .mqtt_uri = "mqtt://192.168.1.10",
+        .wifi_ssid = "",
+        .wifi_password = "",
+        .mqtt_uri = "",
         .message_cb = net_message_cb,
         .user_ctx = NULL,
     };

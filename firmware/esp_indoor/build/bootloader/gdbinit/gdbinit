@@ -1,0 +1,2 @@
+source /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/bootloader/gdbinit/symbols
+source /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/bootloader/gdbinit/connect

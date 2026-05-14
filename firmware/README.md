@@ -78,7 +78,7 @@ idf.py set-target esp32p4
 idf.py build
 ```
 
-如果本机没有 `idf.py`，先按 ESP-IDF v5.5.x 完成环境安装和导出。
+如果本机没有 `idf.py`，先按 ESP-IDF v6,0,1 完成环境安装和导出。
 
 ## 配置建议
 
