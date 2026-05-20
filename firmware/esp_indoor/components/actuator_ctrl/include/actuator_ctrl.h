@@ -9,6 +9,7 @@ extern "C" {
 
 esp_err_t actuator_ctrl_init(void);
 esp_err_t actuator_ctrl_apply_risk(const labguard_risk_state_t *risk);
+esp_err_t actuator_ctrl_set_fan(bool on);
 const labguard_risk_state_t *actuator_ctrl_get_last_risk(void);
 
 #ifdef __cplusplus

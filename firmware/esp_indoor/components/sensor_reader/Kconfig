@@ -1,0 +1,98 @@
+menu "LabGuard indoor sensor reader"
+
+    config LABGUARD_INDOOR_SENSOR_I2C_PORT
+        int "Indoor SHT3x/ENS160 I2C port"
+        range 0 2
+        default 0
+        help
+            ESP32-P4 has multiple I2C controllers. Use port 0 unless another
+            component in this project already owns it.
+
+    config LABGUARD_INDOOR_SENSOR_I2C_SDA_GPIO
+        int "Indoor SHT3x/ENS160 I2C SDA GPIO"
+        range 0 54
+        default 23
+        help
+            Default follows the ESP32-P4 Function EV Board fly-line I2C SDA.
+            Change this if your Dupont wire is connected to another GPIO.
+
+    config LABGUARD_INDOOR_SENSOR_I2C_SCL_GPIO
+        int "Indoor SHT3x/ENS160 I2C SCL GPIO"
+        range 0 54
+        default 22
+        help
+            Default follows the ESP32-P4 Function EV Board fly-line I2C SCL.
+            Change this if your Dupont wire is connected to another GPIO.
+
+    config LABGUARD_INDOOR_SENSOR_I2C_FREQ_HZ
+        int "Indoor SHT3x/ENS160 I2C clock speed"
+        range 10000 400000
+        default 100000
+
+    config LABGUARD_INDOOR_SENSOR_I2C_INTERNAL_PULLUPS
+        bool "Enable ESP32-P4 internal I2C pull-ups"
+        default y
+        help
+            Most SHT3x and ENS160 breakout boards already include pull-up
+            resistors. Keeping the weak internal pull-ups enabled helps with
+            breadboard wiring and does not replace proper external pull-ups.
+
+    config LABGUARD_INDOOR_SENSOR_I2C_SCAN
+        bool "Scan I2C bus at boot"
+        default y
+        help
+            Prints every ACKed 7-bit address at boot. This is useful while
+            checking SHT3x and ENS160 wiring.
+
+    config LABGUARD_INDOOR_SENSOR_I2C_AUTO_DETECT_PINS
+        bool "Auto-detect common ESP32-P4 Function EV Board I2C pins"
+        default y
+        help
+            Tries the configured pins first, then common Function EV Board
+            mappings: fly-line GPIO23/GPIO22, FIB GPIO7/GPIO8, and sample
+            GPIO31/GPIO34.
+
+    config LABGUARD_SHT3X_ADDR
+        hex "SHT3x I2C address"
+        range 0x03 0x77
+        default 0x44
+        help
+            SHT30/SHT31/SHT35 modules are usually 0x44. Some boards can be
+            configured to 0x45.
+
+    config LABGUARD_ENS160_ADDR
+        hex "ENS160 I2C address"
+        range 0x03 0x77
+        default 0x53
+        help
+            DFRobot Gravity ENS160 is commonly 0x53 by default and can be
+            switched to 0x52 with the ADDR selector.
+
+    config LABGUARD_MQ2_ENABLE
+        bool "Enable MQ-2 smoke / combustible gas sensor"
+        default y
+
+    config LABGUARD_MQ2_DO_GPIO
+        int "MQ-2 DO (digital threshold) input GPIO"
+        depends on LABGUARD_MQ2_ENABLE
+        range 0 54
+        default 4
+        help
+            Connect MQ-2 module DO pin here. Use a level shifter or voltage
+            divider if the module is powered from 5V, since the comparator
+            output rail follows VCC.
+
+    config LABGUARD_MQ2_ACTIVE_LOW
+        bool "MQ-2 DO is active low"
+        depends on LABGUARD_MQ2_ENABLE
+        default y
+        help
+            Most MQ-2 breakout boards drive DO low when the gas concentration
+            crosses the threshold set by the on-board potentiometer.
+
+    config LABGUARD_MQ2_INTERNAL_PULLUP
+        bool "Enable internal pull-up on MQ-2 DO line"
+        depends on LABGUARD_MQ2_ENABLE
+        default y
+
+endmenu

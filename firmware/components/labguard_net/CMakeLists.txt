@@ -4,3 +4,4 @@ idf_component_register(
     REQUIRES esp_wifi esp_event nvs_flash esp-mqtt labguard_common
 )
 
+idf_component_optional_requires(PRIVATE espressif__esp_hosted)

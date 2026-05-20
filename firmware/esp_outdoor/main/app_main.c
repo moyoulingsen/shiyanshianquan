@@ -16,6 +16,7 @@
 #include "led_status.h"
 #include "outdoor_camera_capture.h"
 #include "ppe_infer.h"
+#include "sdkconfig.h"
 #include "ui_lvgl.h"
 
 static const char *TAG = "labguard_outdoor";
@@ -276,9 +277,9 @@ void app_main(void)
     event_log_init(NULL);
 
     labguard_net_config_t net_config = {
-        .wifi_ssid = "",
-        .wifi_password = "",
-        .mqtt_uri = "",
+        .wifi_ssid = CONFIG_LABGUARD_WIFI_SSID,
+        .wifi_password = CONFIG_LABGUARD_WIFI_PASSWORD,
+        .mqtt_uri = CONFIG_LABGUARD_MQTT_URI,
         .message_cb = net_message_cb,
         .user_ctx = NULL,
     };

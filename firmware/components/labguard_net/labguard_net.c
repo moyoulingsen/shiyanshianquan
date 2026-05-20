@@ -6,9 +6,20 @@
 
 #include "esp_log.h"
 #include "nvs_flash.h"
-#include "soc/soc_caps.h"
+#include "sdkconfig.h"
 
-#if SOC_WIFI_SUPPORTED
+#if CONFIG_ESP_WIFI_REMOTE_ENABLED && !defined(CONFIG_WIFI_RMT_STATIC_RX_BUFFER_NUM)
+#define CONFIG_WIFI_RMT_STATIC_RX_BUFFER_NUM 10
+#define CONFIG_WIFI_RMT_DYNAMIC_RX_BUFFER_NUM 32
+#define CONFIG_WIFI_RMT_TX_BUFFER_TYPE 1
+#define CONFIG_WIFI_RMT_DYNAMIC_RX_MGMT_BUF 0
+#define CONFIG_WIFI_RMT_ESPNOW_MAX_ENCRYPT_NUM 7
+#endif
+
+#if CONFIG_ESP_HOSTED_ENABLED
+#include "esp_hosted.h"
+#endif
+#if CONFIG_ESP_WIFI_ENABLED || CONFIG_ESP_HOST_WIFI_ENABLED || CONFIG_ESP_WIFI_REMOTE_ENABLED
 #include "esp_event.h"
 #include "esp_netif.h"
 #include "esp_wifi.h"
@@ -22,9 +33,12 @@ static bool s_wifi_ready;
 static bool s_mqtt_ready;
 static const int s_max_subscriptions = 8;
 
-#if SOC_WIFI_SUPPORTED
+#if CONFIG_ESP_WIFI_ENABLED || CONFIG_ESP_HOST_WIFI_ENABLED || CONFIG_ESP_WIFI_REMOTE_ENABLED
 static esp_mqtt_client_handle_t s_mqtt_client;
 static bool s_netif_ready;
+#if CONFIG_ESP_HOSTED_ENABLED
+static bool s_hosted_ready;
+#endif
 #endif
 
 typedef struct {
@@ -61,7 +75,34 @@ static void remember_subscription(const char *topic, int qos)
     ESP_LOGW(TAG, "subscription cache full, dropping topic=%s", topic);
 }
 
-#if SOC_WIFI_SUPPORTED
+#if CONFIG_ESP_WIFI_ENABLED || CONFIG_ESP_HOST_WIFI_ENABLED || CONFIG_ESP_WIFI_REMOTE_ENABLED
+
+static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data);
+
+static esp_err_t start_mqtt_client(void)
+{
+    if (!str_not_empty(s_config.mqtt_uri)) {
+        ESP_LOGW(TAG, "MQTT URI not configured, publish/subscribe will stay local");
+        return ESP_OK;
+    }
+
+    if (s_mqtt_client != NULL) {
+        return ESP_OK;
+    }
+
+    esp_mqtt_client_config_t mqtt_cfg = {
+        .broker.address.uri = s_config.mqtt_uri,
+    };
+    s_mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
+    if (s_mqtt_client == NULL) {
+        return ESP_FAIL;
+    }
+
+    ESP_ERROR_CHECK(esp_mqtt_client_register_event(s_mqtt_client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL));
+    ESP_ERROR_CHECK(esp_mqtt_client_start(s_mqtt_client));
+    ESP_LOGI(TAG, "MQTT client started uri=%s", s_config.mqtt_uri);
+    return ESP_OK;
+}
 
 static void subscribe_all_registered_topics(void)
 {
@@ -136,12 +177,22 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
     }
 
     if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         s_wifi_ready = true;
-        ESP_LOGI(TAG, "Wi-Fi connected and got IP");
+        ESP_LOGI(TAG,
+                 "Wi-Fi connected ip=" IPSTR " gateway=" IPSTR " netmask=" IPSTR,
+                 IP2STR(&event->ip_info.ip),
+                 IP2STR(&event->ip_info.gw),
+                 IP2STR(&event->ip_info.netmask));
+
+        esp_err_t err = start_mqtt_client();
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "MQTT client start failed: %s", esp_err_to_name(err));
+        }
     }
 }
 
-#endif /* SOC_WIFI_SUPPORTED */
+#endif /* CONFIG_ESP_WIFI_ENABLED || CONFIG_ESP_HOST_WIFI_ENABLED || CONFIG_ESP_WIFI_REMOTE_ENABLED */
 
 esp_err_t labguard_net_init(const labguard_net_config_t *config)
 {
@@ -165,7 +216,7 @@ esp_err_t labguard_net_init(const labguard_net_config_t *config)
         return err;
     }
 
-#if SOC_WIFI_SUPPORTED
+#if CONFIG_ESP_WIFI_ENABLED || CONFIG_ESP_HOST_WIFI_ENABLED || CONFIG_ESP_WIFI_REMOTE_ENABLED
     if (str_not_empty(s_config.wifi_ssid)) {
         if (!s_netif_ready) {
             ESP_ERROR_CHECK(esp_netif_init());
@@ -173,6 +224,14 @@ esp_err_t labguard_net_init(const labguard_net_config_t *config)
             esp_netif_create_default_wifi_sta();
             s_netif_ready = true;
         }
+
+#if CONFIG_ESP_HOSTED_ENABLED
+        if (!s_hosted_ready) {
+            ESP_ERROR_CHECK(esp_hosted_init());
+            ESP_ERROR_CHECK(esp_hosted_connect_to_slave());
+            s_hosted_ready = true;
+        }
+#endif
 
         ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL));
         ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL));
@@ -200,7 +259,7 @@ esp_err_t labguard_net_init(const labguard_net_config_t *config)
 
 esp_err_t labguard_net_start(void)
 {
-#if SOC_WIFI_SUPPORTED
+#if CONFIG_ESP_WIFI_ENABLED || CONFIG_ESP_HOST_WIFI_ENABLED || CONFIG_ESP_WIFI_REMOTE_ENABLED
     if (str_not_empty(s_config.wifi_ssid)) {
         ESP_ERROR_CHECK(esp_wifi_start());
     } else {
@@ -208,20 +267,15 @@ esp_err_t labguard_net_start(void)
     }
 
     if (str_not_empty(s_config.mqtt_uri)) {
-        esp_mqtt_client_config_t mqtt_cfg = {
-            .broker.address.uri = s_config.mqtt_uri,
-        };
-        s_mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
-        if (s_mqtt_client == NULL) {
-            return ESP_FAIL;
+        if (s_wifi_ready) {
+            return start_mqtt_client();
         }
-        ESP_ERROR_CHECK(esp_mqtt_client_register_event(s_mqtt_client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL));
-        ESP_ERROR_CHECK(esp_mqtt_client_start(s_mqtt_client));
+        ESP_LOGI(TAG, "MQTT URI configured, waiting for Wi-Fi IP before connecting");
     } else {
         ESP_LOGW(TAG, "MQTT URI not configured, publish/subscribe will stay local");
     }
 #else
-    ESP_LOGW(TAG, "Wi-Fi/MQTT not supported on this SoC, running in local-only mode");
+    ESP_LOGW(TAG, "Wi-Fi/MQTT not enabled in this build, running in local-only mode");
 #endif
 
     return ESP_OK;
@@ -233,7 +287,7 @@ esp_err_t labguard_net_publish(const char *topic, const char *payload, int qos, 
         return ESP_ERR_INVALID_ARG;
     }
 
-#if SOC_WIFI_SUPPORTED
+#if CONFIG_ESP_WIFI_ENABLED || CONFIG_ESP_HOST_WIFI_ENABLED || CONFIG_ESP_WIFI_REMOTE_ENABLED
     if (s_mqtt_client != NULL && s_mqtt_ready) {
         int msg_id = esp_mqtt_client_publish(s_mqtt_client, topic, payload, 0, qos, retain ? 1 : 0);
         if (msg_id < 0) {
@@ -256,7 +310,7 @@ esp_err_t labguard_net_subscribe(const char *topic, int qos)
 
     remember_subscription(topic, qos);
 
-#if SOC_WIFI_SUPPORTED
+#if CONFIG_ESP_WIFI_ENABLED || CONFIG_ESP_HOST_WIFI_ENABLED || CONFIG_ESP_WIFI_REMOTE_ENABLED
     if (s_mqtt_client != NULL && s_mqtt_ready) {
         int msg_id = esp_mqtt_client_subscribe(s_mqtt_client, topic, qos);
         if (msg_id < 0) {
@@ -273,7 +327,7 @@ esp_err_t labguard_net_subscribe(const char *topic, int qos)
 
 bool labguard_net_is_connected(void)
 {
-#if SOC_WIFI_SUPPORTED
+#if CONFIG_ESP_WIFI_ENABLED || CONFIG_ESP_HOST_WIFI_ENABLED || CONFIG_ESP_WIFI_REMOTE_ENABLED
     if (s_mqtt_client != NULL) {
         return s_wifi_ready && s_mqtt_ready;
     }
@@ -284,7 +338,7 @@ bool labguard_net_is_connected(void)
 
 int labguard_net_get_rssi(void)
 {
-#if SOC_WIFI_SUPPORTED
+#if CONFIG_ESP_WIFI_ENABLED || CONFIG_ESP_HOST_WIFI_ENABLED || CONFIG_ESP_WIFI_REMOTE_ENABLED
     wifi_ap_record_t ap = {0};
     if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) {
         return ap.rssi;

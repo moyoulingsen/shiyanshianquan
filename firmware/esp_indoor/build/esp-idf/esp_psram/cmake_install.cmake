@@ -37,3 +37,13 @@ if(NOT DEFINED CMAKE_OBJDUMP)
   set(CMAKE_OBJDUMP "/home/lijiaolong/.espressif/tools/riscv32-esp-elf/esp-15.2.0_20251204/riscv32-esp-elf/bin/riscv32-esp-elf-objdump")
 endif()
 
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
+  include("/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/esp_psram/device/cmake_install.cmake")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
+  include("/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/esp_psram/xip_impl/cmake_install.cmake")
+endif()
+

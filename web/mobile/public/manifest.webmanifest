@@ -1,0 +1,19 @@
+{
+  "name": "LabGuard Indoor Mobile",
+  "short_name": "LabGuard",
+  "description": "Mobile monitoring and control app for the LabGuard indoor node.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#17685f",
+  "background_color": "#eef3f1",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

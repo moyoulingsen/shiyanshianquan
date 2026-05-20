@@ -58,6 +58,7 @@ typedef enum {
     LABGUARD_CMD_FORCE_WARNING,
     LABGUARD_CMD_FORCE_ALARM,
     LABGUARD_CMD_FORCE_EMERGENCY,
+    LABGUARD_CMD_FAN_ON,
 } labguard_command_type_t;
 
 typedef enum {

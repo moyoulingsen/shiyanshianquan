@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LabGuard Indoor Dashboard</title>
+    <script type="module" crossorigin src="/assets/index-pthjiaNb.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BtcfXx1u.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>LabGuard Indoor</h1>
+          <p id="subtitle">室内传感器实时状态</p>
+        </div>
+        <div class="connection">
+          <span id="connection-dot" class="dot"></span>
+          <span id="connection-text">未连接</span>
+        </div>
+      </header>
+
+      <section class="config-panel" aria-label="连接配置">
+        <label>
+          <span>数据源</span>
+          <select id="source-select">
+            <option value="mqtt" selected>MQTT WebSocket</option>
+            <option value="ws">本地串口桥</option>
+          </select>
+        </label>
+        <label id="ws-field" class="hidden">
+          <span>WebSocket</span>
+          <input id="ws-url" value="ws://localhost:8787" />
+        </label>
+        <label id="mqtt-field">
+          <span>MQTT WS</span>
+          <input id="mqtt-url" value="ws://localhost:9001" />
+        </label>
+        <button id="connect-btn" type="button">连接</button>
+      </section>
+
+      <section class="metric-grid" aria-label="实时指标">
+        <article class="metric-card">
+          <span>温度</span>
+          <strong id="temperature">--</strong>
+          <small>°C</small>
+        </article>
+        <article class="metric-card">
+          <span>湿度</span>
+          <strong id="humidity">--</strong>
+          <small>%RH</small>
+        </article>
+        <article class="metric-card">
+          <span>VOC 指标</span>
+          <strong id="voc">--</strong>
+          <small>ENS160</small>
+        </article>
+        <article class="metric-card">
+          <span>MQ-2</span>
+          <strong id="mq2">--</strong>
+          <small>数字报警</small>
+        </article>
+      </section>
+
+      <section class="status-grid">
+        <article class="panel">
+          <div class="panel-title">
+            <h2>风险融合</h2>
+            <span id="risk-badge" class="badge">--</span>
+          </div>
+          <dl class="state-list">
+            <div>
+              <dt>风险文本</dt>
+              <dd id="risk-text">--</dd>
+            </div>
+            <div>
+              <dt>风扇</dt>
+              <dd id="fan-state">--</dd>
+            </div>
+            <div>
+              <dt>水泵</dt>
+              <dd id="pump-state">--</dd>
+            </div>
+            <div>
+              <dt>报警</dt>
+              <dd id="alarm-state">--</dd>
+            </div>
+          </dl>
+        </article>
+
+        <article class="panel">
+          <div class="panel-title">
+            <h2>节点状态</h2>
+            <span id="sensor-ok" class="badge">--</span>
+          </div>
+          <dl class="state-list">
+            <div>
+              <dt>运行时间</dt>
+              <dd id="uptime">--</dd>
+            </div>
+            <div>
+              <dt>Wi-Fi RSSI</dt>
+              <dd id="rssi">--</dd>
+            </div>
+            <div>
+              <dt>固件版本</dt>
+              <dd id="version">--</dd>
+            </div>
+            <div>
+              <dt>最后更新</dt>
+              <dd id="last-update">--</dd>
+            </div>
+          </dl>
+        </article>
+      </section>
+
+      <section class="panel command-panel">
+        <div class="panel-title">
+          <h2>演示控制</h2>
+        </div>
+        <div class="button-row">
+          <button data-command="reset" type="button">重置</button>
+          <button data-command="fan_on" type="button">风扇开启</button>
+          <button data-command="force_normal" type="button">正常</button>
+          <button data-command="force_warning" type="button">预警</button>
+          <button data-command="force_alarm" type="button">报警</button>
+          <button data-command="force_emergency" type="button">紧急</button>
+        </div>
+      </section>
+
+      <section class="panel log-panel">
+        <div class="panel-title">
+          <h2>消息流</h2>
+          <button id="clear-log" type="button">清空</button>
+        </div>
+        <ol id="message-log"></ol>
+      </section>
+    </main>
+
+  </body>
+</html>

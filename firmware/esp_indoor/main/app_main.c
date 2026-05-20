@@ -15,12 +15,14 @@
 #include "labguard_common.h"
 #include "labguard_net.h"
 #include "risk_fusion.h"
+#include "sdkconfig.h"
 #include "sensor_reader.h"
 
 static const char *TAG = "labguard_indoor";
 static portMUX_TYPE s_state_lock = portMUX_INITIALIZER_UNLOCKED;
 
 static bool s_force_safe_mode;
+static bool s_manual_fan_on;
 
 static int64_t now_seconds(void)
 {
@@ -71,6 +73,11 @@ static void set_all_profiles(labguard_profile_t profile)
     hazard_infer_set_profile(profile);
 }
 
+static void clear_manual_overrides(void)
+{
+    s_manual_fan_on = false;
+}
+
 static void apply_command(const labguard_command_t *command)
 {
     if (command == NULL || !labguard_command_targets_node(command, LABGUARD_NODE_INDOOR)) {
@@ -82,10 +89,15 @@ static void apply_command(const labguard_command_t *command)
         set_all_profiles(LABGUARD_PROFILE_AUTO);
         portENTER_CRITICAL(&s_state_lock);
         s_force_safe_mode = false;
+        clear_manual_overrides();
         portEXIT_CRITICAL(&s_state_lock);
+        actuator_ctrl_set_fan(false);
         publish_event(LABGUARD_RISK_NORMAL, "indoor_reset", "clear_forced_mode");
         break;
     case LABGUARD_CMD_SELFTEST:
+        portENTER_CRITICAL(&s_state_lock);
+        clear_manual_overrides();
+        portEXIT_CRITICAL(&s_state_lock);
         set_all_profiles(LABGUARD_PROFILE_ALARM);
         publish_event(LABGUARD_RISK_ALARM, "indoor_selftest", "simulate_alarm_scene");
         break;
@@ -102,13 +114,16 @@ static void apply_command(const labguard_command_t *command)
     case LABGUARD_CMD_FORCE_NORMAL:
         portENTER_CRITICAL(&s_state_lock);
         s_force_safe_mode = true;
+        clear_manual_overrides();
         portEXIT_CRITICAL(&s_state_lock);
+        actuator_ctrl_set_fan(false);
         set_all_profiles(LABGUARD_PROFILE_NORMAL);
         publish_event(LABGUARD_RISK_NORMAL, "indoor_profile_normal", "force_safe_mode");
         break;
     case LABGUARD_CMD_FORCE_WARNING:
         portENTER_CRITICAL(&s_state_lock);
         s_force_safe_mode = false;
+        clear_manual_overrides();
         portEXIT_CRITICAL(&s_state_lock);
         set_all_profiles(LABGUARD_PROFILE_WARNING);
         publish_event(LABGUARD_RISK_WARNING, "indoor_profile_warning", "simulate_warning_scene");
@@ -116,6 +131,7 @@ static void apply_command(const labguard_command_t *command)
     case LABGUARD_CMD_FORCE_ALARM:
         portENTER_CRITICAL(&s_state_lock);
         s_force_safe_mode = false;
+        clear_manual_overrides();
         portEXIT_CRITICAL(&s_state_lock);
         set_all_profiles(LABGUARD_PROFILE_ALARM);
         publish_event(LABGUARD_RISK_ALARM, "indoor_profile_alarm", "simulate_alarm_scene");
@@ -123,9 +139,17 @@ static void apply_command(const labguard_command_t *command)
     case LABGUARD_CMD_FORCE_EMERGENCY:
         portENTER_CRITICAL(&s_state_lock);
         s_force_safe_mode = false;
+        clear_manual_overrides();
         portEXIT_CRITICAL(&s_state_lock);
         set_all_profiles(LABGUARD_PROFILE_EMERGENCY);
         publish_event(LABGUARD_RISK_EMERGENCY, "indoor_profile_emergency", "simulate_fire_scene");
+        break;
+    case LABGUARD_CMD_FAN_ON:
+        portENTER_CRITICAL(&s_state_lock);
+        s_manual_fan_on = true;
+        portEXIT_CRITICAL(&s_state_lock);
+        actuator_ctrl_set_fan(true);
+        publish_event(LABGUARD_RISK_NORMAL, "manual_fan_on", "fan_on");
         break;
     case LABGUARD_CMD_NONE:
     default:
@@ -167,6 +191,7 @@ static void indoor_task(void *arg)
         labguard_hazard_result_t hazard = {0};
         labguard_risk_state_t risk = {0};
         bool force_safe;
+        bool manual_fan_on;
 
         sensor_reader_read(&sensor);
         hazard_infer_run(NULL, 0, &hazard);
@@ -174,6 +199,7 @@ static void indoor_task(void *arg)
 
         portENTER_CRITICAL(&s_state_lock);
         force_safe = s_force_safe_mode;
+        manual_fan_on = s_manual_fan_on;
         portEXIT_CRITICAL(&s_state_lock);
 
         if (force_safe) {
@@ -185,6 +211,10 @@ static void indoor_task(void *arg)
             risk.action_alarm = false;
             risk.action_fan = false;
             risk.action_pump = false;
+        }
+
+        if (manual_fan_on) {
+            risk.action_fan = true;
         }
 
         actuator_ctrl_apply_risk(&risk);
@@ -218,14 +248,15 @@ void app_main(void)
 
     portENTER_CRITICAL(&s_state_lock);
     s_force_safe_mode = false;
+    clear_manual_overrides();
     portEXIT_CRITICAL(&s_state_lock);
 
     event_log_init(NULL);
 
     labguard_net_config_t net_config = {
-        .wifi_ssid = "",
-        .wifi_password = "",
-        .mqtt_uri = "",
+        .wifi_ssid = CONFIG_LABGUARD_WIFI_SSID,
+        .wifi_password = CONFIG_LABGUARD_WIFI_PASSWORD,
+        .mqtt_uri = CONFIG_LABGUARD_MQTT_URI,
         .message_cb = net_message_cb,
         .user_ctx = NULL,
     };
@@ -234,8 +265,10 @@ void app_main(void)
     labguard_net_subscribe(LABGUARD_TOPIC_CMD_RESET, 1);
     labguard_net_subscribe(LABGUARD_TOPIC_CMD_TEST, 1);
 
-    indoor_camera_capture_init();
+    // sensor_reader_init creates the shared I2C bus on GPIO7/8 that the
+    // SC2336 SCCB also lives on, so it must run before the camera pipeline.
     sensor_reader_init();
+    indoor_camera_capture_init();
     hazard_infer_init();
     risk_fusion_init();
     actuator_ctrl_init();
