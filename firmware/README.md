@@ -13,7 +13,9 @@
 - 双节点都具备主循环、状态发布、心跳上报、事件日志。
 - 支持 MQTT 发布/订阅，未配置 Wi-Fi/MQTT 时自动退化为本地日志模式。
 - 室内节点会生成传感器数据、视觉风险结果和融合后的风险等级。
+- 室内传感器链路已加入卡尔曼滤波，并在 MQTT 中同时上报原始值和滤波值。
 - 室外节点会根据 PPE 结果和室内风险做准入判定。
+- 室外 UI 状态面板会汇总门禁、PPE、室内风险、传感器值、联动动作和最近事件。
 - 支持通过 MQTT 命令切换演示场景，例如 `force_warning`、`force_alarm`、`reset`。
 - 所有摄像头、传感器、执行器、LVGL、音频模块都保留了清晰的替换接口，后续可以逐个接入真实驱动。
 
@@ -98,6 +100,7 @@ idf.py build
 
 ## 文档
 
-- [项目介绍.md](/d:/实验室安全/firmware/项目介绍.md)
-- [硬件组装说明.md](/d:/实验室安全/firmware/硬件组装说明.md)
-- [HARDWARE_VERIFICATION.md](/d:/实验室安全/firmware/HARDWARE_VERIFICATION.md)
+- [项目介绍.md](项目介绍.md)
+- [B_DELIVERY_NOTES.md](B_DELIVERY_NOTES.md)
+- [硬件组装说明.md](硬件组装说明.md)
+- [HARDWARE_VERIFICATION.md](HARDWARE_VERIFICATION.md)

@@ -176,6 +176,18 @@ static void net_message_cb(const char *topic, const char *payload, int payload_l
             s_latest_indoor_risk = risk.risk_level;
             s_latest_indoor_status_ts = now_seconds();
             portEXIT_CRITICAL(&s_state_lock);
+            ui_lvgl_update_indoor_risk(&risk, true);
+        }
+        return;
+    }
+
+    if (strcmp(topic, LABGUARD_TOPIC_INDOOR_SENSOR) == 0) {
+        labguard_sensor_data_t sensor = {0};
+        if (labguard_sensor_data_from_json(buffer, &sensor)) {
+            portENTER_CRITICAL(&s_state_lock);
+            s_latest_indoor_status_ts = now_seconds();
+            portEXIT_CRITICAL(&s_state_lock);
+            ui_lvgl_update_indoor_sensor(&sensor);
         }
         return;
     }
@@ -186,6 +198,15 @@ static void net_message_cb(const char *topic, const char *payload, int payload_l
             portENTER_CRITICAL(&s_state_lock);
             s_latest_indoor_status_ts = now_seconds();
             portEXIT_CRITICAL(&s_state_lock);
+            ui_lvgl_set_indoor_online(true);
+        }
+        return;
+    }
+
+    if (strcmp(topic, LABGUARD_TOPIC_EVENT) == 0) {
+        labguard_event_t event = {0};
+        if (labguard_event_from_json(buffer, &event) && event.node != LABGUARD_NODE_OUTDOOR) {
+            event_log_append_event(&event);
         }
         return;
     }
@@ -229,6 +250,8 @@ static void outdoor_task(void *arg)
         }
 
         led_status_apply_access(&decision);
+        ui_lvgl_set_indoor_online(indoor_online);
+        ui_lvgl_set_admin_locked(admin_locked);
         ui_lvgl_update_access(&ppe, &decision, indoor_risk);
 
         audio_prompt_t prompt = prompt_for_reason(decision.reason);
@@ -274,6 +297,7 @@ void app_main(void)
     portEXIT_CRITICAL(&s_state_lock);
 
     event_log_init(NULL);
+    ui_lvgl_init();
 
     labguard_net_config_t net_config = {
         .wifi_ssid = "CONFIGURE_ME",
@@ -285,14 +309,15 @@ void app_main(void)
     labguard_net_init(&net_config);
     labguard_net_start();
     labguard_net_subscribe(LABGUARD_TOPIC_INDOOR_RISK, 1);
+    labguard_net_subscribe(LABGUARD_TOPIC_INDOOR_SENSOR, 1);
     labguard_net_subscribe(LABGUARD_TOPIC_INDOOR_STATUS, 1);
+    labguard_net_subscribe(LABGUARD_TOPIC_EVENT, 1);
     labguard_net_subscribe(LABGUARD_TOPIC_CMD_RESET, 1);
     labguard_net_subscribe(LABGUARD_TOPIC_CMD_TEST, 1);
 
     outdoor_camera_capture_init();
     ppe_infer_init();
     door_fsm_init();
-    ui_lvgl_init();
     audio_prompt_init();
     led_status_init();
 
