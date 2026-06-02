@@ -84,8 +84,12 @@ typedef struct {
     float temperature_c;
     float humidity_rh;
     int voc_index;
+    float temperature_raw_c;
+    float humidity_raw_rh;
+    int voc_raw_index;
     bool mq2_alarm;
     bool sensor_ok;
+    bool filtered;
     int64_t timestamp;
 } labguard_sensor_data_t;
 
@@ -156,7 +160,9 @@ char *labguard_command_to_json(const labguard_command_t *command);
 char *labguard_event_to_json(const labguard_event_t *event);
 
 bool labguard_status_from_json(const char *json, labguard_status_t *status);
+bool labguard_sensor_data_from_json(const char *json, labguard_sensor_data_t *data);
 bool labguard_risk_state_from_json(const char *json, labguard_risk_state_t *state);
+bool labguard_event_from_json(const char *json, labguard_event_t *event);
 bool labguard_command_from_json(const char *json, labguard_command_t *command);
 
 #ifdef __cplusplus

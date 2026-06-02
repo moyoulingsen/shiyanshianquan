@@ -72,6 +72,53 @@ static int s_i2c_scl_gpio;
 static physical_sensor_sample_t s_last_sample;
 static bool s_last_sample_valid;
 
+typedef struct {
+    bool initialized;
+    float estimate;
+    float covariance;
+    float process_noise;
+    float measurement_noise;
+} kalman_filter_t;
+
+static kalman_filter_t s_temperature_filter;
+static kalman_filter_t s_humidity_filter;
+static kalman_filter_t s_voc_filter;
+
+static kalman_filter_t make_filter(float process_noise, float measurement_noise)
+{
+    kalman_filter_t filter = {
+        .initialized = false,
+        .estimate = 0.0f,
+        .covariance = 1.0f,
+        .process_noise = process_noise,
+        .measurement_noise = measurement_noise,
+    };
+    return filter;
+}
+
+static void reset_filters(void)
+{
+    s_temperature_filter = make_filter(0.08f, 0.75f);
+    s_humidity_filter = make_filter(0.12f, 1.20f);
+    s_voc_filter = make_filter(4.0f, 24.0f);
+}
+
+static float kalman_update(kalman_filter_t *filter, float measurement)
+{
+    if (!filter->initialized) {
+        filter->estimate = measurement;
+        filter->covariance = filter->measurement_noise;
+        filter->initialized = true;
+        return filter->estimate;
+    }
+
+    filter->covariance += filter->process_noise;
+    float gain = filter->covariance / (filter->covariance + filter->measurement_noise);
+    filter->estimate += gain * (measurement - filter->estimate);
+    filter->covariance = (1.0f - gain) * filter->covariance;
+    return filter->estimate;
+}
+
 static uint8_t sht3x_crc8(const uint8_t *data)
 {
     uint8_t crc = 0xFF;
@@ -261,8 +308,12 @@ static void fill_safe_default(labguard_sensor_data_t *out, bool sensor_ok)
     out->temperature_c = 25.8f;
     out->humidity_rh = 54.0f;
     out->voc_index = 50;
+    out->temperature_raw_c = out->temperature_c;
+    out->humidity_raw_rh = out->humidity_rh;
+    out->voc_raw_index = out->voc_index;
     out->mq2_alarm = false;
     out->sensor_ok = sensor_ok;
+    out->filtered = false;
     out->timestamp = esp_timer_get_time() / 1000000;
 }
 
@@ -639,6 +690,7 @@ esp_err_t sensor_reader_init(void)
     s_ens_ready = false;
     s_mq2_ready = false;
     s_last_sample_valid = false;
+    reset_filters();
 
     esp_err_t ret = init_i2c_bus();
     if (ret == ESP_OK) {
@@ -657,6 +709,9 @@ esp_err_t sensor_reader_init(void)
 
 void sensor_reader_set_profile(labguard_profile_t profile)
 {
+    if (s_profile != profile) {
+        reset_filters();
+    }
     s_profile = profile;
 }
 
@@ -707,6 +762,15 @@ esp_err_t sensor_reader_read(labguard_sensor_data_t *out)
         out->sensor_ok = true;
         apply_profile_override(s_profile, out);
     }
+
+    out->temperature_raw_c = out->temperature_c;
+    out->humidity_raw_rh = out->humidity_rh;
+    out->voc_raw_index = out->voc_index;
+
+    out->temperature_c = kalman_update(&s_temperature_filter, out->temperature_c);
+    out->humidity_rh = kalman_update(&s_humidity_filter, out->humidity_rh);
+    out->voc_index = (int)(kalman_update(&s_voc_filter, (float)out->voc_index) + 0.5f);
+    out->filtered = true;
 
     return ESP_OK;
 }

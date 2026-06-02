@@ -1,9 +1,14 @@
 #include "labguard_common.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "cJSON.h"
 #include "esp_timer.h"
+
+static char s_parsed_event_source[48];
+static char s_parsed_event_name[96];
+static char s_parsed_event_actions[96];
 
 static int64_t now_seconds(void)
 {
@@ -329,8 +334,12 @@ char *labguard_sensor_data_to_json(const labguard_sensor_data_t *data)
     cJSON_AddNumberToObject(root, "temperature_c", data->temperature_c);
     cJSON_AddNumberToObject(root, "humidity_rh", data->humidity_rh);
     cJSON_AddNumberToObject(root, "voc_index", data->voc_index);
+    cJSON_AddNumberToObject(root, "temperature_raw_c", data->temperature_raw_c);
+    cJSON_AddNumberToObject(root, "humidity_raw_rh", data->humidity_raw_rh);
+    cJSON_AddNumberToObject(root, "voc_raw_index", data->voc_raw_index);
     cJSON_AddBoolToObject(root, "mq2_alarm", data->mq2_alarm);
     cJSON_AddBoolToObject(root, "sensor_ok", data->sensor_ok);
+    cJSON_AddBoolToObject(root, "filtered", data->filtered);
     add_timestamp(root, data->timestamp);
     return print_unformatted(root);
 }
@@ -423,6 +432,32 @@ bool labguard_status_from_json(const char *json, labguard_status_t *status)
     return true;
 }
 
+bool labguard_sensor_data_from_json(const char *json, labguard_sensor_data_t *data)
+{
+    if (json == NULL || data == NULL) {
+        return false;
+    }
+
+    cJSON *root = cJSON_Parse(json);
+    if (root == NULL) {
+        return false;
+    }
+
+    data->temperature_c = (float)json_get_double_or_default(root, "temperature_c", 0.0);
+    data->humidity_rh = (float)json_get_double_or_default(root, "humidity_rh", 0.0);
+    data->voc_index = json_get_int_or_default(root, "voc_index", 0);
+    data->temperature_raw_c = (float)json_get_double_or_default(root, "temperature_raw_c", data->temperature_c);
+    data->humidity_raw_rh = (float)json_get_double_or_default(root, "humidity_raw_rh", data->humidity_rh);
+    data->voc_raw_index = json_get_int_or_default(root, "voc_raw_index", data->voc_index);
+    data->mq2_alarm = json_get_bool_or_default(root, "mq2_alarm", false);
+    data->sensor_ok = json_get_bool_or_default(root, "sensor_ok", false);
+    data->filtered = json_get_bool_or_default(root, "filtered", false);
+    data->timestamp = json_get_i64_or_default(root, "timestamp", 0);
+
+    cJSON_Delete(root);
+    return true;
+}
+
 bool labguard_risk_state_from_json(const char *json, labguard_risk_state_t *state)
 {
     if (json == NULL || state == NULL) {
@@ -469,6 +504,47 @@ bool labguard_risk_state_from_json(const char *json, labguard_risk_state_t *stat
 
     state->model = "hazard_remote";
     state->timestamp = json_get_i64_or_default(root, "timestamp", 0);
+
+    cJSON_Delete(root);
+    return true;
+}
+
+bool labguard_event_from_json(const char *json, labguard_event_t *event)
+{
+    if (json == NULL || event == NULL) {
+        return false;
+    }
+
+    cJSON *root = cJSON_Parse(json);
+    if (root == NULL) {
+        return false;
+    }
+
+    const cJSON *risk_level = cJSON_GetObjectItemCaseSensitive(root, "risk_level");
+    if (cJSON_IsNumber(risk_level)) {
+        event->level = (labguard_risk_level_t)risk_level->valueint;
+    } else {
+        event->level = labguard_risk_level_from_string(json_get_string_or_default(root, "risk_text", "normal"));
+    }
+
+    snprintf(s_parsed_event_source,
+             sizeof(s_parsed_event_source),
+             "%s",
+             json_get_string_or_default(root, "source", "remote"));
+    snprintf(s_parsed_event_name,
+             sizeof(s_parsed_event_name),
+             "%s",
+             json_get_string_or_default(root, "event", "unknown"));
+    snprintf(s_parsed_event_actions,
+             sizeof(s_parsed_event_actions),
+             "%s",
+             json_get_string_or_default(root, "actions", ""));
+
+    event->node = labguard_node_from_string(json_get_string_or_default(root, "node", "unknown"));
+    event->source = s_parsed_event_source;
+    event->event = s_parsed_event_name;
+    event->actions = s_parsed_event_actions;
+    event->timestamp = json_get_i64_or_default(root, "timestamp", 0);
 
     cJSON_Delete(root);
     return true;
