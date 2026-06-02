@@ -4,6 +4,7 @@
 
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "sdkconfig.h"
 
 #ifdef CONFIG_LABGUARD_ACTUATOR_FAN_ACTIVE_LOW
@@ -57,6 +58,20 @@ static void drive(int gpio_num, bool on, bool active_low)
     gpio_set_level(gpio_num, level);
 }
 
+static bool alarm_output_on(const labguard_risk_state_t *risk)
+{
+    if (risk == NULL || !risk->action_alarm) {
+        return false;
+    }
+
+    if (risk->risk_level >= LABGUARD_RISK_EMERGENCY) {
+        return true;
+    }
+
+    int64_t tick_ms = esp_timer_get_time() / 1000;
+    return ((tick_ms / 500) % 2) == 0;
+}
+
 esp_err_t actuator_ctrl_init(void)
 {
     memset(&s_last_risk, 0, sizeof(s_last_risk));
@@ -87,7 +102,7 @@ esp_err_t actuator_ctrl_apply_risk(const labguard_risk_state_t *risk)
 
     drive(CONFIG_LABGUARD_ACTUATOR_FAN_GPIO, risk->action_fan, FAN_ACTIVE_LOW);
     drive(CONFIG_LABGUARD_ACTUATOR_PUMP_GPIO, risk->action_pump, PUMP_ACTIVE_LOW);
-    drive(CONFIG_LABGUARD_ACTUATOR_ALARM_GPIO, risk->action_alarm, ALARM_ACTIVE_LOW);
+    drive(CONFIG_LABGUARD_ACTUATOR_ALARM_GPIO, alarm_output_on(risk), ALARM_ACTIVE_LOW);
 
     ESP_LOGI(TAG,
              "risk=%s alarm=%d fan=%d pump=%d temp=%.1f",

@@ -20,11 +20,14 @@
 #include "esp_sccb_i2c.h"
 #include "esp_sccb_intf.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/portmacro.h"
 #include "freertos/task.h"
 #include "sensor_reader.h"
 
 static const char *TAG = "indoor_camera";
 static bool s_ready;
+static portMUX_TYPE s_frame_lock = portMUX_INITIALIZER_UNLOCKED;
+static indoor_camera_frame_t s_latest_frame;
 
 // Pin assignment matches the ESP32-P4 HMI subboard fly-wires the indoor
 // hardware is built with (5V, GND, PWM26, RST27).
@@ -75,8 +78,16 @@ static bool IRAM_ATTR on_camera_trans_finished(esp_cam_ctlr_handle_t handle,
                                                void *user_data)
 {
     (void)handle;
-    (void)trans;
     (void)user_data;
+
+    portENTER_CRITICAL_ISR(&s_frame_lock);
+    s_latest_frame.data = trans->buffer;
+    s_latest_frame.len = trans->buflen;
+    s_latest_frame.width = DSI_H_RES;
+    s_latest_frame.height = DSI_V_RES;
+    s_latest_frame.pixel_format = INDOOR_CAMERA_PIXEL_FORMAT_RGB565;
+    s_latest_frame.sequence++;
+    portEXIT_CRITICAL_ISR(&s_frame_lock);
     return false;
 }
 
@@ -327,4 +338,23 @@ esp_err_t indoor_camera_capture_init(void)
 bool indoor_camera_capture_is_ready(void)
 {
     return s_ready;
+}
+
+esp_err_t indoor_camera_capture_get_latest_frame(indoor_camera_frame_t *out_frame)
+{
+    if (out_frame == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!s_ready) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    portENTER_CRITICAL(&s_frame_lock);
+    *out_frame = s_latest_frame;
+    portEXIT_CRITICAL(&s_frame_lock);
+
+    if (out_frame->data == NULL || out_frame->len == 0) {
+        return ESP_ERR_NOT_FOUND;
+    }
+    return ESP_OK;
 }

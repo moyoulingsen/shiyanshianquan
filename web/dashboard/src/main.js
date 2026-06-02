@@ -4,6 +4,7 @@ const topics = [
   'labguard/indoor/sensor',
   'labguard/indoor/risk',
   'labguard/indoor/status',
+  'labguard/indoor/camera',
   'labguard/event'
 ]
 
@@ -30,6 +31,12 @@ const els = {
   rssi: document.querySelector('#rssi'),
   version: document.querySelector('#version'),
   lastUpdate: document.querySelector('#last-update'),
+  cameraState: document.querySelector('#camera-state'),
+  cameraPreview: document.querySelector('#camera-preview'),
+  cameraEmpty: document.querySelector('#camera-empty'),
+  cameraResolution: document.querySelector('#camera-resolution'),
+  cameraSequence: document.querySelector('#camera-sequence'),
+  cameraLastUpdate: document.querySelector('#camera-last-update'),
   log: document.querySelector('#message-log'),
   clearLog: document.querySelector('#clear-log')
 }
@@ -37,6 +44,9 @@ const els = {
 let socket = null
 let mqttClient = null
 let connectedSource = null
+let cameraLastFrameAt = 0
+let cameraFramePending = false
+let cameraQueuedPayload = null
 const defaultMqttUrl = `ws://${window.location.hostname || 'localhost'}:9001`
 const savedWsUrl = localStorage.getItem('labguard.dashboard.wsUrl')
 const savedMqttUrl = localStorage.getItem('labguard.dashboard.mqttUrl')
@@ -72,6 +82,48 @@ function boolLabel(value) {
 
 function updateLastSeen() {
   els.lastUpdate.textContent = new Date().toLocaleTimeString()
+}
+
+function updateCameraState(state, text) {
+  els.cameraState.textContent = text
+  els.cameraState.className = `badge ${state}`
+}
+
+function renderCamera(payload) {
+  els.cameraPreview.src = `data:${payload.format};base64,${payload.image_base64}`
+}
+
+function flushQueuedCameraFrame() {
+  if (!cameraQueuedPayload) {
+    cameraFramePending = false
+    return
+  }
+
+  const payload = cameraQueuedPayload
+  cameraQueuedPayload = null
+  renderCamera(payload)
+}
+
+function updateCamera(payload) {
+  if (!payload?.image_base64 || !payload?.format) {
+    return
+  }
+
+  els.cameraPreview.classList.add('ready')
+  els.cameraEmpty.classList.add('hidden')
+  els.cameraResolution.textContent = `${payload.width ?? '--'} × ${payload.height ?? '--'}`
+  els.cameraSequence.textContent = Number.isFinite(Number(payload.sequence)) ? String(payload.sequence) : '--'
+  els.cameraLastUpdate.textContent = new Date().toLocaleTimeString()
+  cameraLastFrameAt = Date.now()
+  updateCameraState('ok', '实时画面')
+
+  if (cameraFramePending) {
+    cameraQueuedPayload = payload
+    return
+  }
+
+  cameraFramePending = true
+  renderCamera(payload)
 }
 
 function addLog(topic, payload) {
@@ -113,6 +165,10 @@ function handleMessage(topic, payload) {
     els.uptime.textContent = formatUptime(payload.uptime_s)
     els.rssi.textContent = Number.isFinite(Number(payload.wifi_rssi)) ? `${payload.wifi_rssi} dBm` : '--'
     els.version.textContent = payload.version ?? '--'
+  }
+
+  if (payload.type === 'camera_frame' || topic === 'labguard/indoor/camera') {
+    updateCamera(payload)
   }
 }
 
@@ -230,6 +286,13 @@ function sendCommand(command) {
   }
 }
 
+els.cameraPreview.addEventListener('load', flushQueuedCameraFrame)
+els.cameraPreview.addEventListener('error', () => {
+  cameraFramePending = false
+  cameraQueuedPayload = null
+  updateCameraState('warn', '画面加载失败')
+})
+
 els.source.addEventListener('change', () => {
   syncSourceFields()
 })
@@ -250,9 +313,20 @@ els.clearLog.addEventListener('click', () => {
   els.log.innerHTML = ''
 })
 
+window.setInterval(() => {
+  if (!cameraLastFrameAt) {
+    updateCameraState('warn', '等待画面')
+    return
+  }
+  if (Date.now() - cameraLastFrameAt > 5000) {
+    updateCameraState('warn', '画面过期')
+  }
+}, 1000)
+
 els.source.value = 'mqtt'
 els.wsUrl.value = savedWsUrl || 'ws://localhost:8787'
 els.mqttUrl.value = savedMqttUrl || defaultMqttUrl
 syncSourceFields()
 setConnection('warn', '未连接')
+updateCameraState('warn', '等待画面')
 connectMqtt()

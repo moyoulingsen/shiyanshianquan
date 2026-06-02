@@ -62,6 +62,31 @@
       </section>
 
       <section class="status-grid">
+        <article class="panel camera-panel">
+          <div class="panel-title">
+            <h2>室内摄像头</h2>
+            <span id="camera-state" class="badge">等待画面</span>
+          </div>
+          <div class="camera-frame-wrap">
+            <img id="camera-preview" alt="室内摄像头实时画面" />
+            <div id="camera-empty" class="camera-empty">暂无摄像头画面</div>
+          </div>
+          <dl class="state-list compact-state-list">
+            <div>
+              <dt>分辨率</dt>
+              <dd id="camera-resolution">--</dd>
+            </div>
+            <div>
+              <dt>帧序号</dt>
+              <dd id="camera-sequence">--</dd>
+            </div>
+            <div>
+              <dt>最后画面</dt>
+              <dd id="camera-last-update">--</dd>
+            </div>
+          </dl>
+        </article>
+
         <article class="panel">
           <div class="panel-title">
             <h2>风险融合</h2>

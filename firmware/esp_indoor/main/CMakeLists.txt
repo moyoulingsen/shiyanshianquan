@@ -10,5 +10,9 @@ idf_component_register(
         risk_fusion
         actuator_ctrl
         camera_capture
+        mbedtls
+        esp_driver_jpeg
+        fatfs
+        sdmmc
 )
 

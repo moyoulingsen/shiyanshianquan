@@ -177,9 +177,53 @@ dt {
 
 .status-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1.25fr 1fr 1fr;
   gap: 14px;
   margin-bottom: 14px;
+}
+
+.camera-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.camera-frame-wrap {
+  position: relative;
+  min-height: 240px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0f1720;
+  border: 1px solid #1f2937;
+}
+
+#camera-preview {
+  width: 100%;
+  display: none;
+  aspect-ratio: 160 / 94;
+  object-fit: cover;
+  background: #0f1720;
+}
+
+#camera-preview.ready {
+  display: block;
+}
+
+.camera-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #dbe4ee;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+
+.camera-empty.hidden {
+  display: none !important;
+}
+
+.compact-state-list {
+  gap: 8px;
 }
 
 .panel {
@@ -317,14 +361,13 @@ dd {
 }
 
 @media (max-width: 860px) {
-  .topbar,
-  .status-grid {
-    grid-template-columns: 1fr;
-  }
-
   .topbar {
     display: grid;
     align-items: start;
+  }
+
+  .status-grid {
+    grid-template-columns: 1fr;
   }
 
   .config-panel,
@@ -359,5 +402,9 @@ dd {
 
   #message-log li {
     grid-template-columns: 1fr;
+  }
+
+  .camera-frame-wrap {
+    min-height: 180px;
   }
 }

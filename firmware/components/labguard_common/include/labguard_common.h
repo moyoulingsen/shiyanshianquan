@@ -15,6 +15,7 @@ extern "C" {
 #define LABGUARD_TOPIC_INDOOR_STATUS  "labguard/indoor/status"
 #define LABGUARD_TOPIC_INDOOR_SENSOR  "labguard/indoor/sensor"
 #define LABGUARD_TOPIC_INDOOR_RISK    "labguard/indoor/risk"
+#define LABGUARD_TOPIC_INDOOR_CAMERA  "labguard/indoor/camera"
 #define LABGUARD_TOPIC_EVENT          "labguard/event"
 #define LABGUARD_TOPIC_CMD_RESET      "labguard/cmd/reset"
 #define LABGUARD_TOPIC_CMD_TEST       "labguard/cmd/test"

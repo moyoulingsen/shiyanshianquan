@@ -246,3 +246,5 @@ $<TARGET_FILE:__idf_event_log>
 $<TARGET_FILE:__idf_risk_fusion>
 $<TARGET_FILE:__idf_actuator_ctrl>
 $<TARGET_FILE:__idf_camera_capture>
+$<TARGET_FILE:__idf_esp_driver_jpeg>
+$<TARGET_FILE:__idf_fatfs>

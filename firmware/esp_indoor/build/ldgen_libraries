@@ -246,3 +246,5 @@
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/risk_fusion/librisk_fusion.a
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/actuator_ctrl/libactuator_ctrl.a
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/camera_capture/libcamera_capture.a
+/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/esp_driver_jpeg/libesp_driver_jpeg.a
+/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/fatfs/libfatfs.a
