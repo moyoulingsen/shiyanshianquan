@@ -195,6 +195,10 @@ const char *labguard_command_type_to_string(labguard_command_type_t type)
         return "fan_on";
     case LABGUARD_CMD_FAN_OFF:
         return "fan_off";
+    case LABGUARD_CMD_PUMP_ON:
+        return "pump_on";
+    case LABGUARD_CMD_PUMP_OFF:
+        return "pump_off";
     case LABGUARD_CMD_NONE:
     default:
         return "none";
@@ -236,6 +240,12 @@ labguard_command_type_t labguard_command_type_from_string(const char *type)
     }
     if (strcmp(type, "fan_off") == 0) {
         return LABGUARD_CMD_FAN_OFF;
+    }
+    if (strcmp(type, "pump_on") == 0) {
+        return LABGUARD_CMD_PUMP_ON;
+    }
+    if (strcmp(type, "pump_off") == 0) {
+        return LABGUARD_CMD_PUMP_OFF;
     }
     return LABGUARD_CMD_NONE;
 }

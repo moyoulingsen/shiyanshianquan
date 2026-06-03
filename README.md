@@ -4,12 +4,89 @@
 
 ## 网页展示怎么打开
 
-### 快速启动（推荐先这样跑）
+项目里有两个前端页面：
+
+- [web/dashboard](web/dashboard/)：电脑端监控大屏
+- [web/mobile](web/mobile/)：手机端页面
+
+### 1. 电脑端 Dashboard 一键启动（推荐）
+
+现在电脑端已经有一键启动脚本，会自动启动本地 MQTT broker 和 Dashboard 网页服务：
+
+```bash
+cd /home/lijiaolong/labguard/shiyanshianquan/web/dashboard
+./run_dashboard_stack.sh
+```
+
+第一次运行时，如果 [web/dashboard/node_modules](web/dashboard/node_modules/) 不存在，脚本会自动执行 `npm install` 安装依赖。
+
+启动成功后终端会打印类似下面的信息：
+
+```text
+LabGuard Dashboard 已启动
+网页地址:  http://localhost:5173
+局域网访问: http://你的电脑IP:5173
+MQTT WS:   ws://你的电脑IP:9001
+板子 MQTT: mqtt://你的电脑IP:1884
+```
+
+浏览器打开：
+
+```text
+http://localhost:5173
+```
+
+如果用手机或另一台电脑访问 Dashboard，要保证设备和运行脚本的电脑在同一个局域网，然后打开终端里打印的局域网地址，例如：
+
+```text
+http://172.20.10.14:5173
+```
+
+停止服务时，在运行脚本的终端按 `Ctrl+C`，脚本会同时关闭 broker 和网页服务。
+
+### 2. Dashboard 端口说明
+
+一键启动脚本默认使用这些端口：
+
+- `5173`：Dashboard 网页地址
+- `9001`：网页连接 MQTT 的 WebSocket 地址
+- `1884`：ESP32 固件连接 MQTT 的 TCP 地址
+
+如果端口被占用，可以启动前临时改端口：
+
+```bash
+cd /home/lijiaolong/labguard/shiyanshianquan/web/dashboard
+WEB_PORT=5175 MQTT_WS_PORT=9002 MQTT_TCP_PORT=1885 ./run_dashboard_stack.sh
+```
+
+注意：MQTT 端口改了以后，固件和网页里的连接地址也要对应修改。
+
+### 3. ESP32 固件怎么连网页
+
+如果要让 `esp_indoor` 的数据出现在网页上，需要把固件里的 MQTT 地址指向运行一键启动脚本的电脑：
+
+```text
+CONFIG_LABGUARD_MQTT_URI="mqtt://你的电脑IP:1884"
+```
+
+同时还要配置 Wi-Fi：
+
+```text
+CONFIG_LABGUARD_WIFI_SSID="你的WiFi"
+CONFIG_LABGUARD_WIFI_PASSWORD="你的密码"
+```
+
+启动 Dashboard 后，终端会打印当前电脑 IP 和应该填入板子的 MQTT 地址，可以直接照着终端输出配置。
+
+### 4. 手动启动 Dashboard（备用）
+
+如果一键脚本不能用，也可以手动启动。
 
 先启动 MQTT broker：
 
 ```bash
 cd /home/lijiaolong/labguard/shiyanshianquan/web/dashboard
+npm install
 npm run broker
 ```
 
@@ -17,7 +94,6 @@ npm run broker
 
 ```bash
 cd /home/lijiaolong/labguard/shiyanshianquan/web/dashboard
-npm install
 npm run dev
 ```
 
@@ -30,107 +106,18 @@ http://localhost:5173
 网页里 MQTT WebSocket 地址填：
 
 ```text
-ws://localhost:9001
-```
-
-如果你是用手机或别的电脑访问网页，不要填 `localhost`，要改成运行 broker 那台电脑的局域网 IP，例如：
-
-```text
-ws://172.20.10.14:9001
-```
-
-项目里有两个前端页面：
-
-- `web/dashboard`：电脑端监控大屏
-- `web/mobile`：手机端页面
-
-### 1. 打开电脑端 Dashboard
-
-先进入目录并安装依赖：
-
-```bash
-cd /home/lijiaolong/labguard/shiyanshianquan/web/dashboard
-npm install
-```
-
-#### 方式 A：本地调试展示
-
-这个方式适合先把网页跑起来看界面。
-
-```bash
-npm run start
-```
-
-它会同时启动：
-
-- Vite 网页服务
-- 串口桥服务
-
-浏览器打开：
-
-```text
-http://localhost:5173
-```
-
-默认网页会连接本地串口桥：
-
-```text
-ws://localhost:8787
-```
-
-如果你的串口不是 `/dev/ttyACM0`，可以这样启动：
-
-```bash
-LABGUARD_PORT=/dev/ttyACM1 npm run start
-```
-
-#### 方式 B：正式 MQTT 展示
-
-先启动 broker：
-
-```bash
-cd /home/lijiaolong/labguard/shiyanshianquan/web/dashboard
-npm run broker
-```
-
-这个 broker 会打开：
-
-- `1884`：给 ESP32 固件连接
-- `9001`：给网页 WebSocket 连接
-
-再单独启动网页：
-
-```bash
-npm run dev
-```
-
-浏览器打开：
-
-```text
-http://localhost:5173
-```
-
-网页里把 MQTT WebSocket 地址填成：
-
-```text
 ws://你的电脑IP:9001
 ```
 
-比如你的电脑 IP 是 `172.20.10.14`，那就是：
+如果只在本机看，可以填：
 
 ```text
-ws://172.20.10.14:9001
+ws://localhost:9001
 ```
 
-电脑 IP 可以这样查看：
+### 5. 手机端页面
 
-```bash
-hostname -I
-```
-
-### 2. 打开手机端页面
-
-先启动手机端页面：
+手机端页面单独启动：
 
 ```bash
 cd /home/lijiaolong/labguard/shiyanshianquan/web/mobile
@@ -156,48 +143,4 @@ http://你的电脑IP:5174/
 http://172.20.10.14:5174/
 ```
 
-手机端默认连接：
-
-```text
-ws://你的电脑IP:9001
-```
-
-所以如果你要让手机端看到实时数据，电脑端还要先启动：
-
-```bash
-cd /home/lijiaolong/labguard/shiyanshianquan/web/dashboard
-npm run broker
-```
-
-### 3. ESP32 固件怎么连网页
-
-如果你要让 `esp_indoor` 的数据出现在网页上，需要把固件里的 MQTT 地址指向运行 broker 的电脑：
-
-```text
-CONFIG_LABGUARD_MQTT_URI="mqtt://你的电脑IP:1884"
-```
-
-同时还要配置：
-
-```text
-CONFIG_LABGUARD_WIFI_SSID="你的WiFi"
-CONFIG_LABGUARD_WIFI_PASSWORD="你的密码"
-```
-
-### 4. 最简单的打开方法
-
-如果你现在只是想先看到网页界面，直接执行：
-
-```bash
-cd /home/lijiaolong/labguard/shiyanshianquan/web/dashboard
-npm install
-npm run start
-```
-
-然后浏览器打开：
-
-```text
-http://localhost:5173
-```
-
-如果你愿意，我下一步可以继续帮你把“网页展示启动步骤”也补到 [web/dashboard/README.md](web/dashboard/README.md) 里，并顺手整理成更适合答辩演示的版本。
+手机端默认连接运行在 `9001` 端口的 MQTT WebSocket。如果要看到实时数据，电脑端还需要先运行 Dashboard 的一键启动脚本，或者至少启动 [web/dashboard](web/dashboard/) 里的 MQTT broker。

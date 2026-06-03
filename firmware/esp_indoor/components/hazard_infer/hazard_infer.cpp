@@ -8,6 +8,7 @@
 #include <memory>
 #include <new>
 #include <string>
+#include <sys/stat.h>
 #include <type_traits>
 #include <vector>
 
@@ -112,8 +113,10 @@ private:
         if constexpr (std::is_same_v<T, float>) {
             (void)scale;
             return value;
-        } else {
+        } else if constexpr (std::is_same_v<T, int8_t> || std::is_same_v<T, int16_t>) {
             return dl::dequantize(value, scale);
+        } else {
+            return (float)value * scale;
         }
     }
 
@@ -211,6 +214,9 @@ static labguard_hazard_backend_t s_backend = LABGUARD_HAZARD_BACKEND_ONBOARD_PEN
 static hazard_infer_runtime_info_t s_runtime_info = {
     .input_width = MODEL_INPUT_WIDTH,
     .input_height = MODEL_INPUT_HEIGHT,
+    .workspace_bytes = 0,
+    .model_file_present = false,
+    .runtime_available = false,
 };
 static std::unique_ptr<FireSmokeDetector> s_detector;
 static uint32_t s_cycle;
@@ -372,29 +378,15 @@ static esp_err_t load_espdl_detector(void)
     }
 
     s_runtime_info.model_file_present = true;
+    s_runtime_info.runtime_available = false;
+    s_runtime_info.workspace_bytes = 0;
 
-    try {
-        const float score_thr = (float)CONFIG_LABGUARD_HAZARD_SCORE_THRESHOLD_PERCENT / 100.0f;
-        const float nms_thr = (float)CONFIG_LABGUARD_HAZARD_NMS_THRESHOLD_PERCENT / 100.0f;
-        s_detector = std::make_unique<FireSmokeDetector>(CONFIG_LABGUARD_HAZARD_MODEL_SDCARD_PATH,
-                                                         score_thr,
-                                                         nms_thr,
-                                                         CONFIG_LABGUARD_HAZARD_TOP_K);
-    } catch (const std::exception &e) {
-        ESP_LOGE(TAG, "ESP-DL detector init failed: %s", e.what());
-        s_detector.reset();
-        s_runtime_info.runtime_available = false;
-        s_runtime_info.workspace_bytes = 0;
-        s_model_ready = false;
-        return ESP_FAIL;
-    } catch (...) {
-        ESP_LOGE(TAG, "ESP-DL detector init failed with unknown exception");
-        s_detector.reset();
-        s_runtime_info.runtime_available = false;
-        s_runtime_info.workspace_bytes = 0;
-        s_model_ready = false;
-        return ESP_FAIL;
-    }
+    const float score_thr = (float)CONFIG_LABGUARD_HAZARD_SCORE_THRESHOLD_PERCENT / 100.0f;
+    const float nms_thr = (float)CONFIG_LABGUARD_HAZARD_NMS_THRESHOLD_PERCENT / 100.0f;
+    s_detector = std::make_unique<FireSmokeDetector>(CONFIG_LABGUARD_HAZARD_MODEL_SDCARD_PATH,
+                                                     score_thr,
+                                                     nms_thr,
+                                                     CONFIG_LABGUARD_HAZARD_TOP_K);
 
     s_runtime_info.runtime_available = true;
     s_runtime_info.workspace_bytes = model_size;
@@ -476,6 +468,9 @@ extern "C" esp_err_t hazard_infer_init(void)
     s_runtime_info = {
         .input_width = MODEL_INPUT_WIDTH,
         .input_height = MODEL_INPUT_HEIGHT,
+        .workspace_bytes = 0,
+        .model_file_present = false,
+        .runtime_available = false,
     };
 
 #if CONFIG_LABGUARD_HAZARD_ENABLE_ESPDL_BACKEND
@@ -489,7 +484,7 @@ extern "C" esp_err_t hazard_infer_init(void)
     }
 #endif
 
-    esp_err_t ret = load_model_placeholder();
+    ret = load_model_placeholder();
     if (ret != ESP_OK) {
         ESP_LOGI(TAG, "on-board model path not fully ready; using provisional fallback until ESP-DL model is available");
     }

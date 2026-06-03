@@ -122,6 +122,14 @@ esp_err_t actuator_ctrl_set_fan(bool on)
     return ESP_OK;
 }
 
+esp_err_t actuator_ctrl_set_pump(bool on)
+{
+    drive(CONFIG_LABGUARD_ACTUATOR_PUMP_GPIO, on, PUMP_ACTIVE_LOW);
+    s_last_risk.action_pump = on;
+    ESP_LOGI(TAG, "manual pump=%d", on);
+    return ESP_OK;
+}
+
 const labguard_risk_state_t *actuator_ctrl_get_last_risk(void)
 {
     return &s_last_risk;

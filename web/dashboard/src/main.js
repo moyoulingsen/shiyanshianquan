@@ -38,7 +38,14 @@ const els = {
   cameraSequence: document.querySelector('#camera-sequence'),
   cameraLastUpdate: document.querySelector('#camera-last-update'),
   log: document.querySelector('#message-log'),
-  clearLog: document.querySelector('#clear-log')
+  clearLog: document.querySelector('#clear-log'),
+  fanToggle: document.querySelector('#fan-toggle'),
+  pumpToggle: document.querySelector('#pump-toggle')
+}
+
+const actuatorState = {
+  fan: false,
+  pump: false
 }
 
 let socket = null
@@ -78,6 +85,22 @@ function riskLabel(level) {
 
 function boolLabel(value) {
   return value ? '开启' : '关闭'
+}
+
+function updateActuatorButton(actuator) {
+  const button = actuator === 'fan' ? els.fanToggle : els.pumpToggle
+  if (!button) return
+
+  const label = actuator === 'fan' ? '风扇' : '水泵'
+  const isOn = actuatorState[actuator]
+  button.textContent = `${label}：${isOn ? '开启' : '关闭'}`
+  button.classList.toggle('is-on', isOn)
+  button.classList.toggle('is-off', !isOn)
+}
+
+function setActuatorState(actuator, isOn) {
+  actuatorState[actuator] = Boolean(isOn)
+  updateActuatorButton(actuator)
 }
 
 function updateLastSeen() {
@@ -156,9 +179,13 @@ function handleMessage(topic, payload) {
     els.riskBadge.className = `badge risk-${label}`
     els.riskText.textContent = payload.risk_text ?? label
     const actions = Array.isArray(payload.actions) ? payload.actions : []
-    els.fan.textContent = boolLabel(actions.includes('fan_on'))
-    els.pump.textContent = boolLabel(actions.includes('pump_on'))
+    const fanOn = actions.includes('fan_on')
+    const pumpOn = actions.includes('pump_on')
+    els.fan.textContent = boolLabel(fanOn)
+    els.pump.textContent = boolLabel(pumpOn)
     els.alarm.textContent = boolLabel(actions.includes('alarm_on'))
+    setActuatorState('fan', fanOn)
+    setActuatorState('pump', pumpOn)
   }
 
   if (payload.type === 'status' || topic === 'labguard/indoor/status') {
@@ -275,7 +302,7 @@ function sendCommand(command) {
 
   if (mqttClient?.connected) {
     mqttClient.publish('labguard/cmd/test', payload, { qos: 1 })
-    return
+    return true
   }
 
   if (socket?.readyState === WebSocket.OPEN) {
@@ -283,6 +310,19 @@ function sendCommand(command) {
       topic: 'labguard/cmd/test',
       payload: JSON.parse(payload)
     }))
+    return true
+  }
+
+  return false
+}
+
+function toggleActuator(actuator) {
+  const nextState = !actuatorState[actuator]
+  const command = `${actuator}_${nextState ? 'on' : 'off'}`
+  setActuatorState(actuator, nextState)
+
+  if (!sendCommand(command)) {
+    setActuatorState(actuator, !nextState)
   }
 }
 
@@ -309,6 +349,10 @@ document.querySelectorAll('[data-command]').forEach((button) => {
   button.addEventListener('click', () => sendCommand(button.dataset.command))
 })
 
+document.querySelectorAll('[data-toggle-actuator]').forEach((button) => {
+  button.addEventListener('click', () => toggleActuator(button.dataset.toggleActuator))
+})
+
 els.clearLog.addEventListener('click', () => {
   els.log.innerHTML = ''
 })
@@ -329,4 +373,6 @@ els.mqttUrl.value = savedMqttUrl || defaultMqttUrl
 syncSourceFields()
 setConnection('warn', '未连接')
 updateCameraState('warn', '等待画面')
+setActuatorState('fan', false)
+setActuatorState('pump', false)
 connectMqtt()

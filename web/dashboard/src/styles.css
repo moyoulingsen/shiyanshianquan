@@ -315,6 +315,24 @@ dd {
   min-width: 86px;
 }
 
+.toggle-control.is-on {
+  border-color: #1c9a64;
+  background: #1c9a64;
+}
+
+.toggle-control.is-on:hover {
+  background: #167a50;
+}
+
+.toggle-control.is-off {
+  border-color: #c43f3f;
+  background: #c43f3f;
+}
+
+.toggle-control.is-off:hover {
+  background: #a83232;
+}
+
 .log-panel {
   min-height: 260px;
 }
