@@ -219,7 +219,17 @@ $<TARGET_FILE:__idf_esp-mqtt>
 $<TARGET_FILE:__idf_labguard_common>
 $<TARGET_FILE:idf::event_log>
 $<TARGET_FILE:idf::sensor_reader>
+$<TARGET_FILE:idf::espressif__dl_fft>
+$<TARGET_FILE:esp_new_jpeg>
+$<TARGET_FILE:idf::espressif__esp-dsp>
+$<TARGET_FILE:idf::espressif__esp-dl>
+$<TARGET_FILE:__idf_espressif__dl_fft>
+$<TARGET_FILE:__idf_esp_driver_jpeg>
+$<TARGET_FILE:__idf_esp_driver_ppa>
+$<TARGET_FILE:__idf_espressif__esp-dsp>
+$<TARGET_FILE:fbs_model>
 $<TARGET_FILE:idf::hazard_infer>
+$<TARGET_FILE:__idf_espressif__esp-dl>
 $<TARGET_FILE:idf::risk_fusion>
 $<TARGET_FILE:__idf_hazard_infer>
 $<TARGET_FILE:idf::actuator_ctrl>
@@ -246,5 +256,4 @@ $<TARGET_FILE:__idf_event_log>
 $<TARGET_FILE:__idf_risk_fusion>
 $<TARGET_FILE:__idf_actuator_ctrl>
 $<TARGET_FILE:__idf_camera_capture>
-$<TARGET_FILE:__idf_esp_driver_jpeg>
 $<TARGET_FILE:__idf_fatfs>

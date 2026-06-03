@@ -370,6 +370,13 @@ static void apply_command(const labguard_command_t *command)
         actuator_ctrl_set_fan(true);
         publish_event(LABGUARD_RISK_NORMAL, "manual_fan_on", "fan_on");
         break;
+    case LABGUARD_CMD_FAN_OFF:
+        portENTER_CRITICAL(&s_state_lock);
+        s_manual_fan_on = false;
+        portEXIT_CRITICAL(&s_state_lock);
+        actuator_ctrl_set_fan(false);
+        publish_event(LABGUARD_RISK_NORMAL, "manual_fan_off", "fan_off");
+        break;
     case LABGUARD_CMD_NONE:
     default:
         break;

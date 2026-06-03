@@ -193,6 +193,8 @@ const char *labguard_command_type_to_string(labguard_command_type_t type)
         return "force_emergency";
     case LABGUARD_CMD_FAN_ON:
         return "fan_on";
+    case LABGUARD_CMD_FAN_OFF:
+        return "fan_off";
     case LABGUARD_CMD_NONE:
     default:
         return "none";
@@ -231,6 +233,9 @@ labguard_command_type_t labguard_command_type_from_string(const char *type)
     }
     if (strcmp(type, "fan_on") == 0) {
         return LABGUARD_CMD_FAN_ON;
+    }
+    if (strcmp(type, "fan_off") == 0) {
+        return LABGUARD_CMD_FAN_OFF;
     }
     return LABGUARD_CMD_NONE;
 }

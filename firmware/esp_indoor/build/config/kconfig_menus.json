@@ -36637,6 +36637,112 @@
                     {
                         "children": [],
                         "depends_on": null,
+                        "help": "Loads a .espdl fire/smoke detector from microSD when available.\nIf the model file is missing or model load fails, firmware falls\nback to the existing provisional hazard inference path.",
+                        "id": "LABGUARD_HAZARD_ENABLE_ESPDL_BACKEND",
+                        "name": "LABGUARD_HAZARD_ENABLE_ESPDL_BACKEND",
+                        "range": null,
+                        "title": "Enable ESP-DL hazard detector backend",
+                        "type": "bool"
+                    },
+                    {
+                        "children": [],
+                        "depends_on": null,
+                        "help": "Absolute path to the packed or single-model .espdl artifact.\nCopy the converted model to the on-board microSD card before boot.",
+                        "id": "LABGUARD_HAZARD_MODEL_SDCARD_PATH",
+                        "name": "LABGUARD_HAZARD_MODEL_SDCARD_PATH",
+                        "range": null,
+                        "title": "ESP-DL model path on microSD",
+                        "type": "string"
+                    },
+                    {
+                        "children": [],
+                        "depends_on": null,
+                        "help": "Minimum detection confidence used before NMS for both fire and\nsmoke classes.",
+                        "id": "LABGUARD_HAZARD_SCORE_THRESHOLD_PERCENT",
+                        "name": "LABGUARD_HAZARD_SCORE_THRESHOLD_PERCENT",
+                        "range": [
+                            1,
+                            99
+                        ],
+                        "title": "Detection score threshold (%)",
+                        "type": "int"
+                    },
+                    {
+                        "children": [],
+                        "depends_on": null,
+                        "help": "IoU threshold used for non-maximum suppression.",
+                        "id": "LABGUARD_HAZARD_NMS_THRESHOLD_PERCENT",
+                        "name": "LABGUARD_HAZARD_NMS_THRESHOLD_PERCENT",
+                        "range": [
+                            1,
+                            99
+                        ],
+                        "title": "Detection NMS threshold (%)",
+                        "type": "int"
+                    },
+                    {
+                        "children": [],
+                        "depends_on": null,
+                        "help": "Final smoke confidence threshold used to set hazard.smoke=true.",
+                        "id": "LABGUARD_HAZARD_SMOKE_THRESHOLD_PERCENT",
+                        "name": "LABGUARD_HAZARD_SMOKE_THRESHOLD_PERCENT",
+                        "range": [
+                            1,
+                            99
+                        ],
+                        "title": "Smoke alarm threshold (%)",
+                        "type": "int"
+                    },
+                    {
+                        "children": [],
+                        "depends_on": null,
+                        "help": "Final flame confidence threshold used to set hazard.flame=true.",
+                        "id": "LABGUARD_HAZARD_FLAME_THRESHOLD_PERCENT",
+                        "name": "LABGUARD_HAZARD_FLAME_THRESHOLD_PERCENT",
+                        "range": [
+                            1,
+                            99
+                        ],
+                        "title": "Flame alarm threshold (%)",
+                        "type": "int"
+                    },
+                    {
+                        "children": [],
+                        "depends_on": null,
+                        "help": "Limits the number of retained detections after post-processing.",
+                        "id": "LABGUARD_HAZARD_TOP_K",
+                        "name": "LABGUARD_HAZARD_TOP_K",
+                        "range": [
+                            1,
+                            64
+                        ],
+                        "title": "Maximum kept detections",
+                        "type": "int"
+                    },
+                    {
+                        "children": [],
+                        "depends_on": null,
+                        "help": "Leave at 0 to let ESP-DL decide automatically. Increase this if\nyou need to force more workspace into internal RAM for speed.",
+                        "id": "LABGUARD_HAZARD_MAX_INTERNAL_BYTES",
+                        "name": "LABGUARD_HAZARD_MAX_INTERNAL_BYTES",
+                        "range": [
+                            0,
+                            2097152
+                        ],
+                        "title": "Preferred internal RAM budget for ESP-DL model",
+                        "type": "int"
+                    }
+                ],
+                "depends_on": null,
+                "id": "component-config-labguard-indoor-hazard-inference-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-components-hazard_infer-Kconfig-1",
+                "title": "LabGuard indoor hazard inference",
+                "type": "menu"
+            },
+            {
+                "children": [
+                    {
+                        "children": [],
+                        "depends_on": null,
                         "help": "ESP32-P4 has multiple I2C controllers. Use port 0 unless another\ncomponent in this project already owns it.",
                         "id": "LABGUARD_INDOOR_SENSOR_I2C_PORT",
                         "name": "LABGUARD_INDOOR_SENSOR_I2C_PORT",
@@ -37368,6 +37474,320 @@
                 "depends_on": null,
                 "id": "component-config-eppp_link-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-managed_components-espressif__eppp_link-Kconfig-1",
                 "title": "eppp_link",
+                "type": "menu"
+            },
+            {
+                "children": [
+                    {
+                        "children": [
+                            {
+                                "children": [],
+                                "depends_on": null,
+                                "help": null,
+                                "id": "PIX_CVT_RGB565_TO_RGB565_SUPPORT",
+                                "name": "PIX_CVT_RGB565_TO_RGB565_SUPPORT",
+                                "range": null,
+                                "title": "Support conversions from rgb565 to rgb565.",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": null,
+                                "help": null,
+                                "id": "PIX_CVT_RGB565_TO_RGB888_SUPPORT",
+                                "name": "PIX_CVT_RGB565_TO_RGB888_SUPPORT",
+                                "range": null,
+                                "title": "Support conversions from rgb565 to rgb888.",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": null,
+                                "help": null,
+                                "id": "PIX_CVT_RGB565_TO_GRAY_SUPPORT",
+                                "name": "PIX_CVT_RGB565_TO_GRAY_SUPPORT",
+                                "range": null,
+                                "title": "Support conversions from rgb565 to gray.",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": null,
+                                "help": null,
+                                "id": "PIX_CVT_RGB565_TO_HSV_SUPPORT",
+                                "name": "PIX_CVT_RGB565_TO_HSV_SUPPORT",
+                                "range": null,
+                                "title": "Support conversions from rgb565 to hsv.",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": null,
+                                "help": null,
+                                "id": "PIX_CVT_RGB888_TO_RGB888_SUPPORT",
+                                "name": "PIX_CVT_RGB888_TO_RGB888_SUPPORT",
+                                "range": null,
+                                "title": "Support conversions from rgb888 to rgb888.",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": null,
+                                "help": null,
+                                "id": "PIX_CVT_RGB888_TO_RGB565_SUPPORT",
+                                "name": "PIX_CVT_RGB888_TO_RGB565_SUPPORT",
+                                "range": null,
+                                "title": "Support conversions from rgb888 to rgb565.",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": null,
+                                "help": null,
+                                "id": "PIX_CVT_RGB888_TO_GRAY_SUPPORT",
+                                "name": "PIX_CVT_RGB888_TO_GRAY_SUPPORT",
+                                "range": null,
+                                "title": "Support conversions from rgb888 to gray.",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": null,
+                                "help": null,
+                                "id": "PIX_CVT_RGB888_TO_HSV_SUPPORT",
+                                "name": "PIX_CVT_RGB888_TO_HSV_SUPPORT",
+                                "range": null,
+                                "title": "Support conversions from rgb888 to hsv.",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": null,
+                                "help": null,
+                                "id": "PIX_CVT_GRAY_TO_GRAY_SUPPORT",
+                                "name": "PIX_CVT_GRAY_TO_GRAY_SUPPORT",
+                                "range": null,
+                                "title": "Support conversions from gray to gray.",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": null,
+                                "help": null,
+                                "id": "PIX_CVT_HSV_TO_HSV_MASK_SUPPORT",
+                                "name": "PIX_CVT_HSV_TO_HSV_MASK_SUPPORT",
+                                "range": null,
+                                "title": "Support conversions from hsv to hsv_mask.",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": null,
+                                "help": null,
+                                "id": "PIX_CVT_YUV_TO_RGB888_SUPPORT",
+                                "name": "PIX_CVT_YUV_TO_RGB888_SUPPORT",
+                                "range": null,
+                                "title": "Support conversions from yuv to rgb888.",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": null,
+                                "help": null,
+                                "id": "PIX_CVT_YUV_TO_RGB565_SUPPORT",
+                                "name": "PIX_CVT_YUV_TO_RGB565_SUPPORT",
+                                "range": null,
+                                "title": "Support conversions from yuv to rgb565.",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": null,
+                                "help": null,
+                                "id": "PIX_CVT_YUV_TO_GRAY_SUPPORT",
+                                "name": "PIX_CVT_YUV_TO_GRAY_SUPPORT",
+                                "range": null,
+                                "title": "Support conversions from yuv to gray.",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": null,
+                                "help": null,
+                                "id": "PIX_CVT_YUV_TO_HSV_SUPPORT",
+                                "name": "PIX_CVT_YUV_TO_HSV_SUPPORT",
+                                "range": null,
+                                "title": "Support conversions from yuv to hsv.",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": null,
+                                "help": null,
+                                "id": "PIX_CVT_YUV_TO_YUV_SUPPORT",
+                                "name": "PIX_CVT_YUV_TO_YUV_SUPPORT",
+                                "range": null,
+                                "title": "Support conversions from yuv to yuv.",
+                                "type": "bool"
+                            }
+                        ],
+                        "depends_on": null,
+                        "id": "component-config-esp-dl-configuration-vision-image-pixel-convert-support-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-managed_components-espressif__esp-dl-Kconfig-2",
+                        "title": "Vision/Image: Pixel Convert Support",
+                        "type": "menu"
+                    }
+                ],
+                "depends_on": null,
+                "id": "component-config-esp-dl-configuration-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-managed_components-espressif__esp-dl-Kconfig-1",
+                "title": "ESP-DL Configuration",
+                "type": "menu"
+            },
+            {
+                "children": [
+                    {
+                        "children": [],
+                        "depends_on": "IDF_TARGET_ESP32 || IDF_TARGET_ESP32S3 || IDF_TARGET_ESP32P4 || IDF_TARGET_ESP32S31",
+                        "help": null,
+                        "id": "DSP_OPTIMIZATIONS_SUPPORTED",
+                        "name": "DSP_OPTIMIZATIONS_SUPPORTED",
+                        "range": null,
+                        "title": null,
+                        "type": "bool"
+                    },
+                    {
+                        "children": [
+                            {
+                                "children": [],
+                                "depends_on": "<choice DSP_OPTIMIZATION>",
+                                "help": null,
+                                "id": "DSP_ANSI",
+                                "name": "DSP_ANSI",
+                                "range": null,
+                                "title": "ANSI C",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "DSP_OPTIMIZATIONS_SUPPORTED && <choice DSP_OPTIMIZATION>",
+                                "help": null,
+                                "id": "DSP_OPTIMIZED",
+                                "name": "DSP_OPTIMIZED",
+                                "range": null,
+                                "title": "Optimized",
+                                "type": "bool"
+                            }
+                        ],
+                        "depends_on": null,
+                        "help": "An ANSI C version could be used for verification and debug purpose,\nor for chips where an optimized version is not available.",
+                        "id": "component-config-dsp-library-dsp-optimization-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-managed_components-espressif__esp-dsp-Kconfig-9",
+                        "name": "DSP_OPTIMIZATION",
+                        "title": "DSP Optimization",
+                        "type": "choice"
+                    },
+                    {
+                        "children": [],
+                        "depends_on": null,
+                        "help": null,
+                        "id": "DSP_OPTIMIZATION",
+                        "name": "DSP_OPTIMIZATION",
+                        "range": null,
+                        "title": null,
+                        "type": "int"
+                    },
+                    {
+                        "children": [
+                            {
+                                "children": [],
+                                "depends_on": "<choice DSP_MAX_FFT_SIZE>",
+                                "help": null,
+                                "id": "DSP_MAX_FFT_SIZE_512",
+                                "name": "DSP_MAX_FFT_SIZE_512",
+                                "range": null,
+                                "title": "512",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "<choice DSP_MAX_FFT_SIZE>",
+                                "help": null,
+                                "id": "DSP_MAX_FFT_SIZE_1024",
+                                "name": "DSP_MAX_FFT_SIZE_1024",
+                                "range": null,
+                                "title": "1024",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "<choice DSP_MAX_FFT_SIZE>",
+                                "help": null,
+                                "id": "DSP_MAX_FFT_SIZE_2048",
+                                "name": "DSP_MAX_FFT_SIZE_2048",
+                                "range": null,
+                                "title": "2048",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "<choice DSP_MAX_FFT_SIZE>",
+                                "help": null,
+                                "id": "DSP_MAX_FFT_SIZE_4096",
+                                "name": "DSP_MAX_FFT_SIZE_4096",
+                                "range": null,
+                                "title": "4096",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "<choice DSP_MAX_FFT_SIZE>",
+                                "help": null,
+                                "id": "DSP_MAX_FFT_SIZE_8192",
+                                "name": "DSP_MAX_FFT_SIZE_8192",
+                                "range": null,
+                                "title": "8192",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "<choice DSP_MAX_FFT_SIZE>",
+                                "help": null,
+                                "id": "DSP_MAX_FFT_SIZE_16384",
+                                "name": "DSP_MAX_FFT_SIZE_16384",
+                                "range": null,
+                                "title": "16384",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "<choice DSP_MAX_FFT_SIZE>",
+                                "help": null,
+                                "id": "DSP_MAX_FFT_SIZE_32768",
+                                "name": "DSP_MAX_FFT_SIZE_32768",
+                                "range": null,
+                                "title": "32768",
+                                "type": "bool"
+                            }
+                        ],
+                        "depends_on": null,
+                        "help": "This is default FFT size for internal usage.",
+                        "id": "component-config-dsp-library-maximum-fft-length-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-managed_components-espressif__esp-dsp-Kconfig-29",
+                        "name": "DSP_MAX_FFT_SIZE",
+                        "title": "Maximum FFT length",
+                        "type": "choice"
+                    },
+                    {
+                        "children": [],
+                        "depends_on": null,
+                        "help": null,
+                        "id": "DSP_MAX_FFT_SIZE",
+                        "name": "DSP_MAX_FFT_SIZE",
+                        "range": null,
+                        "title": null,
+                        "type": "int"
+                    }
+                ],
+                "depends_on": null,
+                "id": "component-config-dsp-library-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-managed_components-espressif__esp-dsp-Kconfig-1",
+                "title": "DSP Library",
                 "type": "menu"
             },
             {
@@ -42893,6 +43313,16 @@
                             },
                             {
                                 "children": [],
+                                "depends_on": "SPIRAM && ESP_HOSTED_ENABLED",
+                                "help": "When enabled, transport buffer allocations first try DMA-capable\nSPIRAM and fall back to internal DMA-capable RAM on failure. This\npreserves scarce internal RAM on targets where GDMA can reach\nPSRAM through cache (e.g. ESP32-P4, ESP32-S3), which is useful\nfor memory-intensive workloads like sustained 1080p video\nstreaming. Leave disabled on targets without DMA-capable PSRAM\nor when transport latency must be minimised.",
+                                "id": "ESP_HOSTED_MEMPOOL_PREFER_SPIRAM",
+                                "name": "ESP_HOSTED_MEMPOOL_PREFER_SPIRAM",
+                                "range": null,
+                                "title": "Prefer SPIRAM for transport buffer allocations",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [],
                                 "depends_on": "ESP_HOSTED_ENABLED",
                                 "help": "Sets the maximum number of simultaneous synchronous RPC Requests.\n(Synchronous RPC Request: each sending task waits for the response.)\nUsually, the host application may send up to 3 simultaneous RPC requests to the slave.\nIncrease this number if you need to send more simultaneous RPC requests.\nNote: the slave will only process one RPC request (sync and async) at a time",
                                 "id": "ESP_HOSTED_MAX_SIMULTANEOUS_SYNC_RPC_REQUESTS",
@@ -42981,7 +43411,7 @@
                                                 ],
                                                 "depends_on": "ESP_HOSTED_RAW_THROUGHPUT_TRANSPORT && ESP_HOSTED_ENABLED",
                                                 "help": null,
-                                                "id": "component-config-enable-esp-hosted-component-esp-hosted-config-debug-settings-rawtp-transport-level-throughput-debug-test-rawtp-send-data-from--home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-managed_components-espressif__esp_hosted-Kconfig-2094",
+                                                "id": "component-config-enable-esp-hosted-component-esp-hosted-config-debug-settings-rawtp-transport-level-throughput-debug-test-rawtp-send-data-from--home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-managed_components-espressif__esp_hosted-Kconfig-2107",
                                                 "name": "ESP_HOSTED_RAW_THROUGHPUT_DIRECTION",
                                                 "title": "RawTP: Send data from:",
                                                 "type": "choice"
@@ -43038,7 +43468,7 @@
                                     }
                                 ],
                                 "depends_on": "ESP_HOSTED_ENABLED",
-                                "id": "component-config-enable-esp-hosted-component-esp-hosted-config-debug-settings-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-managed_components-espressif__esp_hosted-Kconfig-2078",
+                                "id": "component-config-enable-esp-hosted-component-esp-hosted-config-debug-settings-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-managed_components-espressif__esp_hosted-Kconfig-2091",
                                 "title": "Debug Settings",
                                 "type": "menu"
                             },
@@ -43123,7 +43553,7 @@
                                     }
                                 ],
                                 "depends_on": "ESP_HOSTED_ENABLED",
-                                "id": "component-config-enable-esp-hosted-component-esp-hosted-config-data-path-options-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-managed_components-espressif__esp_hosted-Kconfig-2138",
+                                "id": "component-config-enable-esp-hosted-component-esp-hosted-config-data-path-options-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-managed_components-espressif__esp_hosted-Kconfig-2151",
                                 "title": "Data path options",
                                 "type": "menu"
                             },
@@ -43209,7 +43639,7 @@
                                                     }
                                                 ],
                                                 "depends_on": "ESP_HOSTED_NETWORK_SPLIT_ENABLED && ESP_HOSTED_ENABLED",
-                                                "id": "component-config-enable-esp-hosted-component-esp-hosted-config-enable-network-split-shared-ip-address-between-host-and-slave-lwip-port-config-host-side-remote-lwip-port-config-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-managed_components-espressif__esp_hosted-Kconfig-2240",
+                                                "id": "component-config-enable-esp-hosted-component-esp-hosted-config-enable-network-split-shared-ip-address-between-host-and-slave-lwip-port-config-host-side-remote-lwip-port-config-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-managed_components-espressif__esp_hosted-Kconfig-2253",
                                                 "title": "Host side (remote) LWIP port config",
                                                 "type": "menu"
                                             },
@@ -43257,13 +43687,13 @@
                                                     }
                                                 ],
                                                 "depends_on": "ESP_HOSTED_NETWORK_SPLIT_ENABLED && ESP_HOSTED_ENABLED",
-                                                "id": "component-config-enable-esp-hosted-component-esp-hosted-config-enable-network-split-shared-ip-address-between-host-and-slave-lwip-port-config-slave-side-remote-lwip-port-config-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-managed_components-espressif__esp_hosted-Kconfig-2274",
+                                                "id": "component-config-enable-esp-hosted-component-esp-hosted-config-enable-network-split-shared-ip-address-between-host-and-slave-lwip-port-config-slave-side-remote-lwip-port-config-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-managed_components-espressif__esp_hosted-Kconfig-2287",
                                                 "title": "Slave side (remote) LWIP port config",
                                                 "type": "menu"
                                             }
                                         ],
                                         "depends_on": "ESP_HOSTED_NETWORK_SPLIT_ENABLED && ESP_HOSTED_ENABLED",
-                                        "id": "component-config-enable-esp-hosted-component-esp-hosted-config-enable-network-split-shared-ip-address-between-host-and-slave-lwip-port-config-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-managed_components-espressif__esp_hosted-Kconfig-2237",
+                                        "id": "component-config-enable-esp-hosted-component-esp-hosted-config-enable-network-split-shared-ip-address-between-host-and-slave-lwip-port-config-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-managed_components-espressif__esp_hosted-Kconfig-2250",
                                         "title": "LWIP port config",
                                         "type": "menu"
                                     }
@@ -43337,7 +43767,7 @@
                                                         ],
                                                         "depends_on": "ESP_HOSTED_HOST_DEEP_SLEEP_ALLOWED && ESP_HOSTED_ENABLED",
                                                         "help": null,
-                                                        "id": "component-config-enable-esp-hosted-component-esp-hosted-config-allow-host-to-power-save-allow-host-to-enter-deep-sleep-slave-will-wakeup-host-using-gpio-host-power-save-configuration-host-wakeup-gpio-level-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-managed_components-espressif__esp_hosted-Kconfig-2362",
+                                                        "id": "component-config-enable-esp-hosted-component-esp-hosted-config-allow-host-to-power-save-allow-host-to-enter-deep-sleep-slave-will-wakeup-host-using-gpio-host-power-save-configuration-host-wakeup-gpio-level-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-managed_components-espressif__esp_hosted-Kconfig-2375",
                                                         "name": "PRIV_HOST_WAKEUP_GPIO_LEVEL",
                                                         "title": "Host Wakeup GPIO Level",
                                                         "type": "choice"
@@ -43354,7 +43784,7 @@
                                                     }
                                                 ],
                                                 "depends_on": "ESP_HOSTED_HOST_DEEP_SLEEP_ALLOWED && ESP_HOSTED_ENABLED",
-                                                "id": "component-config-enable-esp-hosted-component-esp-hosted-config-allow-host-to-power-save-allow-host-to-enter-deep-sleep-slave-will-wakeup-host-using-gpio-host-power-save-configuration-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-managed_components-espressif__esp_hosted-Kconfig-2326",
+                                                "id": "component-config-enable-esp-hosted-component-esp-hosted-config-allow-host-to-power-save-allow-host-to-enter-deep-sleep-slave-will-wakeup-host-using-gpio-host-power-save-configuration-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-managed_components-espressif__esp_hosted-Kconfig-2339",
                                                 "title": "Host Power Save Configuration",
                                                 "type": "menu"
                                             }
