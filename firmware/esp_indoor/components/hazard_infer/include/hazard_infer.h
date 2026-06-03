@@ -15,6 +15,7 @@ typedef enum {
     LABGUARD_HAZARD_BACKEND_MOCK = 0,
     LABGUARD_HAZARD_BACKEND_MODEL_PLACEHOLDER,
     LABGUARD_HAZARD_BACKEND_ONBOARD_PENDING,
+    LABGUARD_HAZARD_BACKEND_ESPDL_SDCARD,
 } labguard_hazard_backend_t;
 
 typedef struct {
@@ -22,6 +23,7 @@ typedef struct {
     bool flame;
     float score_smoke;
     float score_flame;
+    uint16_t detection_count;
     const char *model;
 } labguard_hazard_result_t;
 
@@ -34,7 +36,11 @@ typedef struct {
 } hazard_infer_runtime_info_t;
 
 esp_err_t hazard_infer_init(void);
-esp_err_t hazard_infer_run(const void *frame, size_t frame_len, labguard_hazard_result_t *out);
+esp_err_t hazard_infer_run(const void *frame,
+                           size_t frame_len,
+                           uint16_t frame_width,
+                           uint16_t frame_height,
+                           labguard_hazard_result_t *out);
 void hazard_infer_set_profile(labguard_profile_t profile);
 labguard_profile_t hazard_infer_get_profile(void);
 labguard_hazard_backend_t hazard_infer_get_backend(void);

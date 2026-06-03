@@ -419,13 +419,13 @@ static void indoor_task(void *arg)
         esp_err_t frame_ret = indoor_camera_capture_get_latest_frame(&frame);
         if (frame_ret == ESP_OK) {
             logged_missing_frame = false;
-            hazard_infer_run(frame.data, frame.len, &hazard);
+            hazard_infer_run(frame.data, frame.len, frame.width, frame.height, &hazard);
         } else {
             if (!logged_missing_frame) {
                 ESP_LOGW(TAG, "camera frame unavailable for hazard inference yet: %s", esp_err_to_name(frame_ret));
                 logged_missing_frame = true;
             }
-            hazard_infer_run(NULL, 0, &hazard);
+            hazard_infer_run(NULL, 0, 0, 0, &hazard);
         }
 
         risk_fusion_evaluate(&sensor, &hazard, &risk);

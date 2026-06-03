@@ -1,0 +1,62 @@
+menu "LabGuard indoor hazard inference"
+
+    config LABGUARD_HAZARD_ENABLE_ESPDL_BACKEND
+        bool "Enable ESP-DL hazard detector backend"
+        default y
+        help
+            Loads a .espdl fire/smoke detector from microSD when available.
+            If the model file is missing or model load fails, firmware falls
+            back to the existing provisional hazard inference path.
+
+    config LABGUARD_HAZARD_MODEL_SDCARD_PATH
+        string "ESP-DL model path on microSD"
+        default "/sdcard/models/p4/lab_fire_smoke.espdl"
+        help
+            Absolute path to the packed or single-model .espdl artifact.
+            Copy the converted model to the on-board microSD card before boot.
+
+    config LABGUARD_HAZARD_SCORE_THRESHOLD_PERCENT
+        int "Detection score threshold (%)"
+        range 1 99
+        default 45
+        help
+            Minimum detection confidence used before NMS for both fire and
+            smoke classes.
+
+    config LABGUARD_HAZARD_NMS_THRESHOLD_PERCENT
+        int "Detection NMS threshold (%)"
+        range 1 99
+        default 45
+        help
+            IoU threshold used for non-maximum suppression.
+
+    config LABGUARD_HAZARD_SMOKE_THRESHOLD_PERCENT
+        int "Smoke alarm threshold (%)"
+        range 1 99
+        default 50
+        help
+            Final smoke confidence threshold used to set hazard.smoke=true.
+
+    config LABGUARD_HAZARD_FLAME_THRESHOLD_PERCENT
+        int "Flame alarm threshold (%)"
+        range 1 99
+        default 70
+        help
+            Final flame confidence threshold used to set hazard.flame=true.
+
+    config LABGUARD_HAZARD_TOP_K
+        int "Maximum kept detections"
+        range 1 64
+        default 12
+        help
+            Limits the number of retained detections after post-processing.
+
+    config LABGUARD_HAZARD_MAX_INTERNAL_BYTES
+        int "Preferred internal RAM budget for ESP-DL model"
+        range 0 2097152
+        default 0
+        help
+            Leave at 0 to let ESP-DL decide automatically. Increase this if
+            you need to force more workspace into internal RAM for speed.
+
+endmenu
