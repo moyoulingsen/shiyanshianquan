@@ -36558,6 +36558,85 @@
             {
                 "children": [
                     {
+                        "children": [
+                            {
+                                "children": [],
+                                "depends_on": "LABGUARD_ESPDL_PROBE_ENABLE",
+                                "help": "Run espdl_probe_run_once() from app_main(). Keep disabled for the\nnormal LabGuard demo flow. Only enable in an isolated POC build\nafter the flash or SD-card deployment path has been prepared.",
+                                "id": "LABGUARD_ESPDL_PROBE_RUN_ON_BOOT",
+                                "name": "LABGUARD_ESPDL_PROBE_RUN_ON_BOOT",
+                                "range": null,
+                                "title": "Run isolated ESP-DL probe once on boot",
+                                "type": "bool"
+                            },
+                            {
+                                "children": [
+                                    {
+                                        "children": [],
+                                        "depends_on": "<choice LABGUARD_ESPDL_PROBE_LOAD_MODE>",
+                                        "help": "Embed firmware/components/espdl_probe/model/model.espdl with\ntarget_add_aligned_binary_data and load it from rodata. This is the\nsimplest load path for API validation, but it adds the full .espdl\nsize to the app partition.",
+                                        "id": "LABGUARD_ESPDL_PROBE_LOAD_RODATA",
+                                        "name": "LABGUARD_ESPDL_PROBE_LOAD_RODATA",
+                                        "range": null,
+                                        "title": "Load model from flash rodata",
+                                        "type": "bool"
+                                    },
+                                    {
+                                        "children": [],
+                                        "depends_on": "<choice LABGUARD_ESPDL_PROBE_LOAD_MODE>",
+                                        "help": "Load the .espdl from a mounted SD card path. Indoor already\nmounts /sdcard in app_main.c; outdoor does not currently have\nSD card mount logic in the repository. This avoids embedding the\nmodel in rodata, but still links the ESP-DL runtime into the app.",
+                                        "id": "LABGUARD_ESPDL_PROBE_LOAD_SDCARD",
+                                        "name": "LABGUARD_ESPDL_PROBE_LOAD_SDCARD",
+                                        "range": null,
+                                        "title": "Load model from SD card",
+                                        "type": "bool"
+                                    }
+                                ],
+                                "depends_on": "LABGUARD_ESPDL_PROBE_ENABLE",
+                                "help": "Select only the isolated probe model source. This does not wire\nESP-DL into the existing inference or risk paths.",
+                                "id": "component-config-labguard-esp-dl-probe-enable-isolated-esp-dl-probe-build-esp-dl-probe-model-load-mode-home-lijiaolong-labguard-shiyanshianquan-firmware-components-espdl_probe-Kconfig-22",
+                                "name": "LABGUARD_ESPDL_PROBE_LOAD_MODE",
+                                "title": "ESP-DL probe model load mode",
+                                "type": "choice"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "LABGUARD_ESPDL_PROBE_ENABLE && LABGUARD_ESPDL_PROBE_LOAD_SDCARD",
+                                "help": "Path passed to dl::Model when MODEL_LOCATION_IN_SDCARD is selected.",
+                                "id": "LABGUARD_ESPDL_PROBE_SDCARD_PATH",
+                                "name": "LABGUARD_ESPDL_PROBE_SDCARD_PATH",
+                                "range": null,
+                                "title": "SD card .espdl path",
+                                "type": "string"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "LABGUARD_ESPDL_PROBE_ENABLE",
+                                "help": "When a debug .espdl model is loaded, call profile_module(true)\nto print the slowest modules first.",
+                                "id": "LABGUARD_ESPDL_PROBE_SORT_PROFILE_BY_LATENCY",
+                                "name": "LABGUARD_ESPDL_PROBE_SORT_PROFILE_BY_LATENCY",
+                                "range": null,
+                                "title": "Sort module profile by latency",
+                                "type": "bool"
+                            }
+                        ],
+                        "depends_on": null,
+                        "help": "Build the isolated ESP-DL probe component. This does not connect\nESP-DL to PPE, hazard, door, or risk-fusion inference paths.\nKeep this disabled for the normal demo flow. Enabling it links the\nESP-DL C++ runtime and can increase the app image by more than the\ncurrent 2MB flash partition layout can hold.",
+                        "id": "LABGUARD_ESPDL_PROBE_ENABLE",
+                        "name": "LABGUARD_ESPDL_PROBE_ENABLE",
+                        "range": null,
+                        "title": "Enable isolated ESP-DL probe build",
+                        "type": "bool"
+                    }
+                ],
+                "depends_on": null,
+                "id": "component-config-labguard-esp-dl-probe-home-lijiaolong-labguard-shiyanshianquan-firmware-components-espdl_probe-Kconfig-1",
+                "title": "LabGuard ESP-DL probe",
+                "type": "menu"
+            },
+            {
+                "children": [
+                    {
                         "children": [],
                         "depends_on": null,
                         "help": "Drives one channel of the 4-way MOSFET module. Active-high (3.3V\nturns the channel on, GND turns it off). Set to -1 to disable.",

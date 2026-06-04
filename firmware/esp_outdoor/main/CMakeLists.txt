@@ -6,10 +6,13 @@ idf_component_register(
         labguard_net
         event_log
         camera_capture
+        espdl_probe
         ppe_infer
         door_fsm
         ui_lvgl
         audio_prompt
         led_status
+        fatfs
+        sdmmc
 )
 

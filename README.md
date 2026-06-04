@@ -2,6 +2,131 @@
 
 实验室安全大作业。
 
+## 常用启动命令（放这里，优先看这个）
+
+### 1. 全部联调一键启动（最常用）
+
+同时启动电脑端 Dashboard、MQTT broker 和手机 Expo：
+
+```bash
+cd /home/lijiaolong/labguard/shiyanshianquan
+./run_labguard_stack.sh
+```
+
+这个脚本会自动启动：
+
+- [web/dashboard](web/dashboard/)：电脑端监控网页
+- 本地 MQTT broker：板子和网页/手机共用
+- [mobile/LabGuard](mobile/LabGuard/)：Expo 手机 App 服务
+
+启动成功后终端会打印这些地址，照着填就行：
+
+```text
+电脑网页端: http://localhost:5173
+Dashboard: http://你的电脑IP:5173
+手机 MQTT WS: ws://你的电脑IP:9001
+板子 MQTT: mqtt://你的电脑IP:1884
+Expo: exp://你的电脑IP:8081
+```
+
+脚本默认会先尝试释放这些常用端口（1884 / 9001 / 5173 / 8081），避免旧的 broker、Vite、Expo 进程占着不放。
+如果你不想自动强制清端口，可以这样启动：
+
+```bash
+FORCE_FREE_PORTS=0 ./run_labguard_stack.sh
+```
+
+停止全部服务：在运行脚本的终端按 `Ctrl+C`。
+
+### 2. 只启动电脑端 Dashboard + MQTT broker
+
+```bash
+cd /home/lijiaolong/labguard/shiyanshianquan/web/dashboard
+./run_dashboard_stack.sh
+```
+
+如果不想自动释放 1884 / 9001 / 5173 端口，可以这样运行：
+
+```bash
+FORCE_FREE_PORTS=0 ./run_dashboard_stack.sh
+```
+
+### 3. 只启动手机 Expo App
+
+```bash
+cd /home/lijiaolong/labguard/shiyanshianquan/mobile/LabGuard
+./run_mobile_app.sh
+```
+
+如果不想自动释放 Expo 默认端口，可以这样运行：
+
+```bash
+FORCE_FREE_PORTS=0 ./run_mobile_app.sh
+```
+
+### 4. 板子 MQTT 配置
+
+烧录前在 `idf.py menuconfig` 里确认：
+
+```text
+CONFIG_LABGUARD_WIFI_SSID="你的WiFi"
+CONFIG_LABGUARD_WIFI_PASSWORD="你的密码"
+CONFIG_LABGUARD_MQTT_URI="mqtt://你的电脑IP:1884"
+```
+
+`你的电脑IP` 直接看 `./run_labguard_stack.sh` 或 `./run_dashboard_stack.sh` 启动时打印的 `板子 MQTT` 地址。
+
+### 5. 室内/室外板烧录和监视
+
+室内节点：
+
+```bash
+cd /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor
+. /home/lijiaolong/esp/esp-idf/export.sh
+idf.py set-target esp32p4
+idf.py menuconfig
+idf.py -p <串口> flash monitor
+```
+
+室外节点：
+
+```bash
+cd /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_outdoor
+. /home/lijiaolong/esp/esp-idf/export.sh
+idf.py set-target esp32p4
+idf.py menuconfig
+idf.py -p <串口> flash monitor
+```
+
+常见串口一般是 `/dev/ttyACM0` 或 `/dev/ttyUSB0`，可以先看：
+
+```bash
+ls /dev/ttyACM* /dev/ttyUSB*
+```
+
+例如：
+
+```bash
+idf.py -p /dev/ttyACM0 flash monitor
+```
+
+### 6. 改默认端口
+
+全部联调脚本可以临时改端口：
+
+```bash
+WEB_PORT=5175 EXPO_PORT=8082 MQTT_WS_PORT=9002 MQTT_TCP_PORT=1885 ./run_labguard_stack.sh
+```
+
+只启动 Dashboard 时也可以改端口：
+
+```bash
+cd /home/lijiaolong/labguard/shiyanshianquan/web/dashboard
+WEB_PORT=5175 MQTT_WS_PORT=9002 MQTT_TCP_PORT=1885 ./run_dashboard_stack.sh
+```
+
+注意：`MQTT_TCP_PORT` 改了以后，板子的 `CONFIG_LABGUARD_MQTT_URI` 也要对应改。
+
 ## 网页展示怎么打开
 
 项目里有两个前端页面：
@@ -63,7 +188,7 @@ WEB_PORT=5175 MQTT_WS_PORT=9002 MQTT_TCP_PORT=1885 ./run_dashboard_stack.sh
 
 ### 3. ESP32 固件怎么连网页
 
-如果要让 `esp_indoor` 的数据出现在网页上，需要把固件里的 MQTT 地址指向运行一键启动脚本的电脑：
+如果要让 `esp_indoor` 或 `esp_outdoor` 的数据出现在网页和手机上，需要把固件里的 MQTT 地址指向运行一键启动脚本的电脑：
 
 ```text
 CONFIG_LABGUARD_MQTT_URI="mqtt://你的电脑IP:1884"
@@ -78,7 +203,35 @@ CONFIG_LABGUARD_WIFI_PASSWORD="你的密码"
 
 启动 Dashboard 后，终端会打印当前电脑 IP 和应该填入板子的 MQTT 地址，可以直接照着终端输出配置。
 
-### 4. 手动启动 Dashboard（备用）
+### 4. 板子烧录命令
+
+室内节点：
+
+```bash
+cd /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor
+idf.py set-target esp32p4
+idf.py menuconfig
+idf.py -p <串口> flash monitor
+```
+
+室外节点：
+
+```bash
+cd /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_outdoor
+idf.py set-target esp32p4
+idf.py menuconfig
+idf.py -p <串口> flash monitor
+```
+
+`menuconfig` 里重点确认：
+
+```text
+CONFIG_LABGUARD_WIFI_SSID="你的WiFi"
+CONFIG_LABGUARD_WIFI_PASSWORD="你的密码"
+CONFIG_LABGUARD_MQTT_URI="mqtt://你的电脑IP:1884"
+```
+
+### 5. 手动启动 Dashboard（备用）
 
 如果一键脚本不能用，也可以手动启动。
 
@@ -115,7 +268,7 @@ ws://你的电脑IP:9001
 ws://localhost:9001
 ```
 
-### 5. 手机端页面
+### 6. 手机端页面
 
 手机端页面单独启动：
 

@@ -27,10 +27,10 @@ esp_err_t risk_fusion_evaluate(const labguard_sensor_data_t *sensor,
 
     if (hazard->flame && hazard->score_flame >= 0.70f) {
         level = LABGUARD_RISK_EMERGENCY;
-        risk_text = "flame_confirmed";
+        risk_text = "fire_event";
     } else if ((hazard->smoke && sensor->mq2_alarm) || (sensor->mq2_alarm && temp_high)) {
         level = LABGUARD_RISK_ALARM;
-        risk_text = "smoke_and_gas_alarm";
+        risk_text = "toxic_gas_event";
     } else if ((hazard->smoke && hazard->score_smoke >= 0.50f) || temp_high || voc_high || sensor->mq2_alarm) {
         level = LABGUARD_RISK_WARNING;
         risk_text = "warning";

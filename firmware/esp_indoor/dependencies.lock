@@ -222,6 +222,6 @@ direct_dependencies:
 - espressif/esp_sccb_intf
 - espressif/esp_wifi_remote
 - idf
-manifest_hash: 2d3b2931a56a64bc41d872b30cb622868b7fcaead5e1c4bf6cdfbb5005114fa3
+manifest_hash: 8c931f04d6314ec0febbfe4381efb76fb44f0f4281fd0f4554054ab777ad2a94
 target: esp32p4
 version: 3.0.0

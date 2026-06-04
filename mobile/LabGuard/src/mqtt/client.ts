@@ -38,6 +38,19 @@ function riskLabel(level: unknown): RiskKey {
   return labels[Number(level)] ?? 'normal'
 }
 
+function riskDisplayText(level: unknown, text: unknown) {
+  const value = typeof text === 'string' ? text : ''
+  if (value === 'toxic_gas_event' || value === 'smoke_and_gas_alarm') return '有毒气体事件'
+  if (value === 'fire_event' || value === 'flame_confirmed') return '火灾事件'
+  if (value === 'warning') return '高温预警'
+
+  const numericLevel = Number(level)
+  if (numericLevel === 2) return '有毒气体事件'
+  if (numericLevel === 3) return '火灾事件'
+  if (numericLevel === 1) return '高温预警'
+  return '正常'
+}
+
 function boolLabel(value: unknown) {
   return Boolean(value)
 }
@@ -89,7 +102,7 @@ function updateRisk(payload: Record<string, unknown>) {
   store.setRisk({
     level: safeLevel,
     label,
-    text: String(payload.risk_text ?? label)
+    text: riskDisplayText(safeLevel, payload.risk_text)
   })
   store.setActuator('fan', { on: fanOn, level: fanLevel })
   store.setActuator('pump', { on: pumpOn, level: pumpLevel })

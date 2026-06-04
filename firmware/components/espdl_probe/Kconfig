@@ -1,0 +1,63 @@
+menu "LabGuard ESP-DL probe"
+
+config LABGUARD_ESPDL_PROBE_ENABLE
+    bool "Enable isolated ESP-DL probe build"
+    default n
+    help
+        Build the isolated ESP-DL probe component. This does not connect
+        ESP-DL to PPE, hazard, door, or risk-fusion inference paths.
+        Keep this disabled for the normal demo flow. Enabling it links the
+        ESP-DL C++ runtime and can increase the app image by more than the
+        current 2MB flash partition layout can hold.
+
+config LABGUARD_ESPDL_PROBE_RUN_ON_BOOT
+    bool "Run isolated ESP-DL probe once on boot"
+    depends on LABGUARD_ESPDL_PROBE_ENABLE
+    default n
+    help
+        Run espdl_probe_run_once() from app_main(). Keep disabled for the
+        normal LabGuard demo flow. Only enable in an isolated POC build
+        after the flash or SD-card deployment path has been prepared.
+
+choice LABGUARD_ESPDL_PROBE_LOAD_MODE
+    prompt "ESP-DL probe model load mode"
+    depends on LABGUARD_ESPDL_PROBE_ENABLE
+    default LABGUARD_ESPDL_PROBE_LOAD_RODATA
+    help
+        Select only the isolated probe model source. This does not wire
+        ESP-DL into the existing inference or risk paths.
+
+config LABGUARD_ESPDL_PROBE_LOAD_RODATA
+    bool "Load model from flash rodata"
+    help
+        Embed firmware/components/espdl_probe/model/model.espdl with
+        target_add_aligned_binary_data and load it from rodata. This is the
+        simplest load path for API validation, but it adds the full .espdl
+        size to the app partition.
+
+config LABGUARD_ESPDL_PROBE_LOAD_SDCARD
+    bool "Load model from SD card"
+    help
+        Load the .espdl from a mounted SD card path. Indoor already
+        mounts /sdcard in app_main.c; outdoor does not currently have
+        SD card mount logic in the repository. This avoids embedding the
+        model in rodata, but still links the ESP-DL runtime into the app.
+
+endchoice
+
+config LABGUARD_ESPDL_PROBE_SDCARD_PATH
+    string "SD card .espdl path"
+    depends on LABGUARD_ESPDL_PROBE_ENABLE && LABGUARD_ESPDL_PROBE_LOAD_SDCARD
+    default "/sdcard/model.espdl"
+    help
+        Path passed to dl::Model when MODEL_LOCATION_IN_SDCARD is selected.
+
+config LABGUARD_ESPDL_PROBE_SORT_PROFILE_BY_LATENCY
+    bool "Sort module profile by latency"
+    depends on LABGUARD_ESPDL_PROBE_ENABLE
+    default y
+    help
+        When a debug .espdl model is loaded, call profile_module(true)
+        to print the slowest modules first.
+
+endmenu

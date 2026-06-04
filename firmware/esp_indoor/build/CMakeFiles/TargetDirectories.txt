@@ -1237,6 +1237,13 @@
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/camera_capture/CMakeFiles/install.dir
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/camera_capture/CMakeFiles/install/local.dir
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/camera_capture/CMakeFiles/install/strip.dir
+/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espdl_probe/CMakeFiles/__idf_espdl_probe.dir
+/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espdl_probe/CMakeFiles/edit_cache.dir
+/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espdl_probe/CMakeFiles/rebuild_cache.dir
+/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espdl_probe/CMakeFiles/list_install_components.dir
+/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espdl_probe/CMakeFiles/install.dir
+/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espdl_probe/CMakeFiles/install/local.dir
+/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espdl_probe/CMakeFiles/install/strip.dir
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espressif__esp_hosted/CMakeFiles/__idf_espressif__esp_hosted.dir
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espressif__esp_hosted/CMakeFiles/edit_cache.dir
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espressif__esp_hosted/CMakeFiles/rebuild_cache.dir

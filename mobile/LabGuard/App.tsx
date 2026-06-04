@@ -26,6 +26,16 @@ import { formatNumber, formatUptime } from './src/utils/format'
 
 const DEFAULT_BROKER_URL = 'ws://172.20.10.14:9001'
 
+function riskDisplayText(text: string, label: string) {
+  if (text === 'toxic_gas_event' || text === 'smoke_and_gas_alarm') return '有毒气体事件'
+  if (text === 'fire_event' || text === 'flame_confirmed') return '火灾事件'
+  if (text === 'warning') return '高温预警'
+  if (label === 'alarm') return '有毒气体事件'
+  if (label === 'emergency') return '火灾事件'
+  if (label === 'warning') return '高温预警'
+  return text
+}
+
 export default function App() {
   const [showBusinessUi, setShowBusinessUi] = useState(true)
 
@@ -93,9 +103,9 @@ export default function App() {
     () => [
       { title: '重置', command: 'reset', tone: 'primary' as const },
       { title: '正常', command: 'force_normal', tone: 'normal' as const },
-      { title: '预警', command: 'force_warning', tone: 'warning' as const },
-      { title: '报警', command: 'force_alarm', tone: 'danger' as const },
-      { title: '紧急', command: 'force_emergency', tone: 'danger' as const }
+      { title: '高温预警', command: 'force_warning', tone: 'warning' as const },
+      { title: '有毒气体事件', command: 'force_alarm', tone: 'danger' as const },
+      { title: '火灾事件', command: 'force_emergency', tone: 'danger' as const }
     ],
     []
   )
@@ -146,7 +156,7 @@ export default function App() {
           <>
             <ConnectionPanel state={connectionState} text={connectionText} lastUpdate={lastUpdateText} />
 
-            <RiskCard label={risk.label} title={`风险 ${risk.level}`} text={risk.text} />
+            <RiskCard label={risk.label} title={`风险 ${risk.level}`} text={riskDisplayText(risk.text, risk.label)} />
 
             <View style={styles.metricGrid}>
               <SensorCard title="温度" value={formatNumber(sensor.temperatureC)} unit="°C" />

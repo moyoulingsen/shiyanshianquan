@@ -1,0 +1,39 @@
+menu "LabGuard outdoor audio prompts"
+
+    config LABGUARD_AUDIO_PROMPT_I2S_WAV
+        bool "Play voice prompts from SD card over I2S"
+        default y
+        help
+            Play fixed PCM WAV prompt files from the mounted SD card through a
+            MAX98357A-compatible I2S amplifier. If disabled, audio_prompt only
+            records and logs the selected prompt.
+
+    config LABGUARD_AUDIO_PROMPT_SD_MOUNT_POINT
+        string "Audio prompt SD card mount point"
+        default "/sdcard"
+        depends on LABGUARD_AUDIO_PROMPT_I2S_WAV
+
+    config LABGUARD_AUDIO_PROMPT_DIR
+        string "Audio prompt directory on SD card"
+        default "/audio"
+        depends on LABGUARD_AUDIO_PROMPT_I2S_WAV
+
+    config LABGUARD_AUDIO_PROMPT_I2S_DOUT_GPIO
+        int "MAX98357A DIN GPIO"
+        range -1 54
+        default 20
+        depends on LABGUARD_AUDIO_PROMPT_I2S_WAV
+
+    config LABGUARD_AUDIO_PROMPT_I2S_BCLK_GPIO
+        int "MAX98357A BCLK GPIO"
+        range -1 54
+        default 21
+        depends on LABGUARD_AUDIO_PROMPT_I2S_WAV
+
+    config LABGUARD_AUDIO_PROMPT_I2S_WS_GPIO
+        int "MAX98357A LRC/WS GPIO"
+        range -1 54
+        default 22
+        depends on LABGUARD_AUDIO_PROMPT_I2S_WAV
+
+endmenu

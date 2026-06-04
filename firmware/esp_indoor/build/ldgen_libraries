@@ -233,17 +233,18 @@
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/risk_fusion/librisk_fusion.a
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/hazard_infer/libhazard_infer.a
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/actuator_ctrl/libactuator_ctrl.a
+/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/esp_driver_ledc/libesp_driver_ledc.a
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espressif__esp_sccb_intf/libespressif__esp_sccb_intf.a
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espressif__esp_cam_sensor/libespressif__esp_cam_sensor.a
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espressif__esp_sccb_intf/libespressif__esp_sccb_intf.a
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/esp_driver_cam/libesp_driver_cam.a
-/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/esp_driver_ledc/libesp_driver_ledc.a
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espressif__esp_lcd_ek79007/libespressif__esp_lcd_ek79007.a
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/esp_lcd/libesp_lcd.a
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/camera_capture/libcamera_capture.a
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/sensor_reader/libsensor_reader.a
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espressif__esp_cam_sensor/libespressif__esp_cam_sensor.a
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espressif__esp_lcd_ek79007/libespressif__esp_lcd_ek79007.a
+/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espdl_probe/libespdl_probe.a
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espressif__esp_hosted/libespressif__esp_hosted.a
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espressif__esp_serial_slave_link/libespressif__esp_serial_slave_link.a
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espressif__eppp_link/libespressif__eppp_link.a
@@ -256,4 +257,5 @@
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/risk_fusion/librisk_fusion.a
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/actuator_ctrl/libactuator_ctrl.a
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/camera_capture/libcamera_capture.a
+/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espdl_probe/libespdl_probe.a
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/fatfs/libfatfs.a

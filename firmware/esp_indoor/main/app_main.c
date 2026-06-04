@@ -17,6 +17,7 @@
 #include "esp_ldo_regulator.h"
 #include "esp_timer.h"
 #include "esp_vfs_fat.h"
+#include "espdl_probe.h"
 #include "hazard_infer.h"
 #include "indoor_camera_capture.h"
 #include "labguard_common.h"
@@ -521,15 +522,19 @@ static void indoor_task(void *arg)
         if (manual_fan_on) {
             risk.action_fan = true;
             risk.fan_level_pct = manual_fan_level_pct;
-        } else {
-            risk.fan_level_pct = risk.action_fan ? 100 : 0;
+        } else if (risk.action_fan && risk.fan_level_pct <= 0) {
+            risk.fan_level_pct = 100;
+        } else if (!risk.action_fan) {
+            risk.fan_level_pct = 0;
         }
 
         if (manual_pump_on) {
             risk.action_pump = true;
             risk.pump_level_pct = manual_pump_level_pct;
-        } else {
-            risk.pump_level_pct = risk.action_pump ? 100 : 0;
+        } else if (risk.action_pump && risk.pump_level_pct <= 0) {
+            risk.pump_level_pct = 100;
+        } else if (!risk.action_pump) {
+            risk.pump_level_pct = 0;
         }
 
         if (manual_alarm_on) {
@@ -619,6 +624,9 @@ void app_main(void)
     sensor_reader_init();
     indoor_camera_capture_init();
     hazard_infer_init();
+#if CONFIG_LABGUARD_ESPDL_PROBE_RUN_ON_BOOT
+    espdl_probe_run_once();
+#endif
     risk_fusion_init();
     actuator_ctrl_init();
 

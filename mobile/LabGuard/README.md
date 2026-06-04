@@ -23,14 +23,19 @@
 
 ## 运行
 
-推荐直接使用启动脚本：
+推荐直接使用仓库根目录的联合调试脚本：
 
 ```bash
-cd /home/lijiaolong/labguard/shiyanshianquan/mobile/LabGuard
-./run_mobile_app.sh
+cd /home/lijiaolong/labguard/shiyanshianquan
+./run_labguard_stack.sh
 ```
 
-如果需要，也可以直接使用 Expo 命令：
+它会同时启动：
+
+- [web/dashboard](../web/dashboard/) 的 MQTT broker + Dashboard
+- [mobile/LabGuard](.) 的 Expo 服务
+
+如果只想单独启动手机端，也可以继续使用当前脚本：
 
 ```bash
 npm start
@@ -55,10 +60,10 @@ npm run ios
 当前应用默认地址写在 [App.tsx](App.tsx) 里：
 
 ```ts
-ws://192.168.1.100:9001
+ws://172.20.10.14:9001
 ```
 
-启动后可以在 App 顶部输入框改成你电脑的局域网地址，例如：
+启动后会默认填入你当前电脑的局域网地址；如果电脑 IP 改了，也可以在 App 顶部输入框改成新的地址，例如：
 
 ```text
 ws://172.20.10.14:9001

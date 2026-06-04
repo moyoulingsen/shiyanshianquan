@@ -54,8 +54,8 @@ const topics = [
 const riskMeta = {
   normal: { title: '正常', icon: 'shield-check' },
   warning: { title: '预警', icon: 'alert-triangle' },
-  alarm: { title: '报警', icon: 'siren' },
-  emergency: { title: '紧急', icon: 'flame' }
+  alarm: { title: '有毒气体', icon: 'siren' },
+  emergency: { title: '火灾', icon: 'flame' }
 }
 
 const clientId = `labguard_mobile_${Math.random().toString(16).slice(2)}`
@@ -126,6 +126,13 @@ function riskLabel(level) {
   return labels[Number(level)] ?? 'normal'
 }
 
+function riskDisplayText(level, riskText) {
+  const labels = ['正常', '高温预警', '有毒气体事件', '火灾事件']
+  if (riskText === 'toxic_gas_event' || riskText === 'smoke_and_gas_alarm') return '有毒气体事件'
+  if (riskText === 'fire_event' || riskText === 'flame_confirmed') return '火灾事件'
+  return labels[Number(level)] ?? riskText ?? '正常'
+}
+
 function boolText(value) {
   return value ? '开启' : '关闭'
 }
@@ -157,7 +164,7 @@ function updateRisk(payload) {
   const meta = riskMeta[label]
   els.riskCard.className = `risk-card risk-${label}`
   els.riskLevel.textContent = meta.title
-  els.riskText.textContent = payload.risk_text ?? label
+  els.riskText.textContent = riskDisplayText(payload.risk_level, payload.risk_text)
   els.riskIcon.innerHTML = `<i data-lucide="${meta.icon}"></i>`
 
   const actions = Array.isArray(payload.actions) ? payload.actions : []

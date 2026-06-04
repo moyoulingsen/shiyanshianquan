@@ -211,11 +211,17 @@ esp_err_t actuator_ctrl_apply_risk(const labguard_risk_state_t *risk)
     }
 
     s_last_risk = *risk;
-    if (s_last_risk.fan_level_pct <= 0) {
-        s_last_risk.fan_level_pct = s_last_risk.action_fan ? 100 : 0;
+    if (s_last_risk.action_fan && s_last_risk.fan_level_pct < 0) {
+        s_last_risk.fan_level_pct = 100;
     }
-    if (s_last_risk.pump_level_pct <= 0) {
-        s_last_risk.pump_level_pct = s_last_risk.action_pump ? 100 : 0;
+    if (!s_last_risk.action_fan) {
+        s_last_risk.fan_level_pct = 0;
+    }
+    if (s_last_risk.action_pump && s_last_risk.pump_level_pct < 0) {
+        s_last_risk.pump_level_pct = 100;
+    }
+    if (!s_last_risk.action_pump) {
+        s_last_risk.pump_level_pct = 0;
     }
 
     set_pwm_level(CONFIG_LABGUARD_ACTUATOR_FAN_GPIO,

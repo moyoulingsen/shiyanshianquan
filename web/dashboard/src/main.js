@@ -91,6 +91,13 @@ function riskLabel(level) {
   return labels[Number(level)] ?? '--'
 }
 
+function riskDisplayText(level, riskText) {
+  const labels = ['正常', '高温预警', '有毒气体事件', '火灾事件']
+  if (riskText === 'toxic_gas_event' || riskText === 'smoke_and_gas_alarm') return '有毒气体事件'
+  if (riskText === 'fire_event' || riskText === 'flame_confirmed') return '火灾事件'
+  return labels[Number(level)] ?? riskText ?? '--'
+}
+
 function boolLabel(value) {
   return value ? '开启' : '关闭'
 }
@@ -204,9 +211,9 @@ function handleMessage(topic, payload) {
 
   if (payload.type === 'risk_state' || topic === 'labguard/indoor/risk') {
     const label = riskLabel(payload.risk_level)
-    els.riskBadge.textContent = label
+    els.riskBadge.textContent = riskDisplayText(payload.risk_level, payload.risk_text)
     els.riskBadge.className = `badge risk-${label}`
-    els.riskText.textContent = payload.risk_text ?? label
+    els.riskText.textContent = riskDisplayText(payload.risk_level, payload.risk_text)
     const fanOn = Boolean(payload.action_fan ?? (Array.isArray(payload.actions) && payload.actions.includes('fan_on')))
     const pumpOn = Boolean(payload.action_pump ?? (Array.isArray(payload.actions) && payload.actions.includes('pump_on')))
     const alarmOn = Boolean(payload.action_alarm ?? (Array.isArray(payload.actions) && payload.actions.includes('alarm_on')))

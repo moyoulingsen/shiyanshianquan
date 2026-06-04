@@ -482,6 +482,13 @@ extern "C" esp_err_t hazard_infer_init(void)
                  s_runtime_info.runtime_available);
         return ESP_OK;
     }
+
+    if (!s_logged_missing_model) {
+        ESP_LOGW(TAG,
+                 "ESP-DL detector unavailable (%s); falling back to provisional hazard path",
+                 esp_err_to_name(ret));
+        s_logged_missing_model = true;
+    }
 #endif
 
     ret = load_model_placeholder();
