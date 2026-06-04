@@ -144,12 +144,35 @@
         </div>
         <div class="button-row">
           <button data-command="reset" type="button">重置</button>
-          <button id="fan-toggle" class="toggle-control is-off" data-toggle-actuator="fan" type="button">风扇：关闭</button>
-          <button id="pump-toggle" class="toggle-control is-off" data-toggle-actuator="pump" type="button">水泵：关闭</button>
+          <div class="actuator-control" data-actuator-panel="fan">
+            <button id="fan-toggle" class="toggle-control is-off" data-toggle-actuator="fan" type="button">风扇：关闭</button>
+            <label class="slider-panel hidden" id="fan-slider-panel">
+              <span>风扇电压 / 速度</span>
+              <div class="slider-row">
+                <button class="step-button" type="button" data-step-actuator="fan" data-step-delta="-1" aria-label="风扇减少">−</button>
+                <input id="fan-slider" type="range" min="0" max="100" step="1" value="100" data-level-actuator="fan" />
+                <button class="step-button" type="button" data-step-actuator="fan" data-step-delta="1" aria-label="风扇增加">+</button>
+                <output id="fan-slider-value">100%</output>
+              </div>
+            </label>
+          </div>
+          <div class="actuator-control" data-actuator-panel="pump">
+            <button id="pump-toggle" class="toggle-control is-off" data-toggle-actuator="pump" type="button">水泵：关闭</button>
+            <label class="slider-panel hidden" id="pump-slider-panel">
+              <span>水泵电压 / 速度</span>
+              <div class="slider-row">
+                <button class="step-button" type="button" data-step-actuator="pump" data-step-delta="-1" aria-label="水泵减少">−</button>
+                <input id="pump-slider" type="range" min="0" max="100" step="1" value="100" data-level-actuator="pump" />
+                <button class="step-button" type="button" data-step-actuator="pump" data-step-delta="1" aria-label="水泵增加">+</button>
+                <output id="pump-slider-value">100%</output>
+              </div>
+            </label>
+          </div>
+          <button id="alarm-toggle" class="toggle-control is-off" data-toggle-alarm type="button">喇叭：关闭</button>
           <button data-command="force_normal" type="button">正常</button>
-          <button data-command="force_warning" type="button">预警</button>
-          <button data-command="force_alarm" type="button">报警</button>
-          <button data-command="force_emergency" type="button">紧急</button>
+          <button data-command="force_warning" type="button">高温预警</button>
+          <button data-command="force_alarm" type="button">有毒气体预警</button>
+          <button data-command="force_emergency" type="button">火灾预警</button>
         </div>
       </section>
 

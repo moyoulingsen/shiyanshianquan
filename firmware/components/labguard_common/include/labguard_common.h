@@ -63,6 +63,8 @@ typedef enum {
     LABGUARD_CMD_FAN_OFF,
     LABGUARD_CMD_PUMP_ON,
     LABGUARD_CMD_PUMP_OFF,
+    LABGUARD_CMD_ALARM_ON,
+    LABGUARD_CMD_ALARM_OFF,
 } labguard_command_type_t;
 
 typedef enum {
@@ -106,6 +108,8 @@ typedef struct {
     bool action_alarm;
     bool action_fan;
     bool action_pump;
+    int fan_level_pct;
+    int pump_level_pct;
     const char *model;
     int64_t timestamp;
 } labguard_risk_state_t;
@@ -130,6 +134,7 @@ typedef struct {
 typedef struct {
     labguard_command_type_t type;
     labguard_node_t target_node;
+    int level_pct;
     int64_t timestamp;
 } labguard_command_t;
 

@@ -33,6 +33,9 @@ static portMUX_TYPE s_state_lock = portMUX_INITIALIZER_UNLOCKED;
 static bool s_force_safe_mode;
 static bool s_manual_fan_on;
 static bool s_manual_pump_on;
+static bool s_manual_alarm_on;
+static int s_manual_fan_level_pct;
+static int s_manual_pump_level_pct;
 
 #define CAMERA_PREVIEW_WIDTH     80
 #define CAMERA_PREVIEW_HEIGHT    48
@@ -104,10 +107,24 @@ static void set_all_profiles(labguard_profile_t profile)
     hazard_infer_set_profile(profile);
 }
 
+static int command_level_or_default(const labguard_command_t *command, int default_level)
+{
+    if (command == NULL || command->level_pct < 0) {
+        return default_level;
+    }
+    if (command->level_pct > 100) {
+        return 100;
+    }
+    return command->level_pct;
+}
+
 static void clear_manual_overrides(void)
 {
     s_manual_fan_on = false;
     s_manual_pump_on = false;
+    s_manual_alarm_on = false;
+    s_manual_fan_level_pct = 100;
+    s_manual_pump_level_pct = 100;
 }
 
 static uint8_t expand_rgb565_component(uint16_t value, int bits)
@@ -314,6 +331,7 @@ static void apply_command(const labguard_command_t *command)
         portEXIT_CRITICAL(&s_state_lock);
         actuator_ctrl_set_fan(false);
         actuator_ctrl_set_pump(false);
+        actuator_ctrl_set_alarm(false);
         publish_event(LABGUARD_RISK_NORMAL, "indoor_reset", "clear_forced_mode");
         break;
     case LABGUARD_CMD_SELFTEST:
@@ -340,6 +358,7 @@ static void apply_command(const labguard_command_t *command)
         portEXIT_CRITICAL(&s_state_lock);
         actuator_ctrl_set_fan(false);
         actuator_ctrl_set_pump(false);
+        actuator_ctrl_set_alarm(false);
         set_all_profiles(LABGUARD_PROFILE_NORMAL);
         publish_event(LABGUARD_RISK_NORMAL, "indoor_profile_normal", "force_safe_mode");
         break;
@@ -370,7 +389,9 @@ static void apply_command(const labguard_command_t *command)
     case LABGUARD_CMD_FAN_ON:
         portENTER_CRITICAL(&s_state_lock);
         s_manual_fan_on = true;
+        s_manual_fan_level_pct = command_level_or_default(command, s_manual_fan_level_pct);
         portEXIT_CRITICAL(&s_state_lock);
+        actuator_ctrl_set_fan_level(s_manual_fan_level_pct);
         actuator_ctrl_set_fan(true);
         publish_event(LABGUARD_RISK_NORMAL, "manual_fan_on", "fan_on");
         break;
@@ -384,7 +405,9 @@ static void apply_command(const labguard_command_t *command)
     case LABGUARD_CMD_PUMP_ON:
         portENTER_CRITICAL(&s_state_lock);
         s_manual_pump_on = true;
+        s_manual_pump_level_pct = command_level_or_default(command, s_manual_pump_level_pct);
         portEXIT_CRITICAL(&s_state_lock);
+        actuator_ctrl_set_pump_level(s_manual_pump_level_pct);
         actuator_ctrl_set_pump(true);
         publish_event(LABGUARD_RISK_NORMAL, "manual_pump_on", "pump_on");
         break;
@@ -394,6 +417,20 @@ static void apply_command(const labguard_command_t *command)
         portEXIT_CRITICAL(&s_state_lock);
         actuator_ctrl_set_pump(false);
         publish_event(LABGUARD_RISK_NORMAL, "manual_pump_off", "pump_off");
+        break;
+    case LABGUARD_CMD_ALARM_ON:
+        portENTER_CRITICAL(&s_state_lock);
+        s_manual_alarm_on = true;
+        portEXIT_CRITICAL(&s_state_lock);
+        actuator_ctrl_set_alarm(true);
+        publish_event(LABGUARD_RISK_NORMAL, "manual_alarm_on", "alarm_on");
+        break;
+    case LABGUARD_CMD_ALARM_OFF:
+        portENTER_CRITICAL(&s_state_lock);
+        s_manual_alarm_on = false;
+        portEXIT_CRITICAL(&s_state_lock);
+        actuator_ctrl_set_alarm(false);
+        publish_event(LABGUARD_RISK_NORMAL, "manual_alarm_off", "alarm_off");
         break;
     case LABGUARD_CMD_NONE:
     default:
@@ -439,6 +476,9 @@ static void indoor_task(void *arg)
         bool force_safe;
         bool manual_fan_on;
         bool manual_pump_on;
+        bool manual_alarm_on;
+        int manual_fan_level_pct;
+        int manual_pump_level_pct;
 
         sensor_reader_read(&sensor);
 
@@ -460,6 +500,9 @@ static void indoor_task(void *arg)
         force_safe = s_force_safe_mode;
         manual_fan_on = s_manual_fan_on;
         manual_pump_on = s_manual_pump_on;
+        manual_alarm_on = s_manual_alarm_on;
+        manual_fan_level_pct = s_manual_fan_level_pct;
+        manual_pump_level_pct = s_manual_pump_level_pct;
         portEXIT_CRITICAL(&s_state_lock);
 
         if (force_safe) {
@@ -471,14 +514,26 @@ static void indoor_task(void *arg)
             risk.action_alarm = false;
             risk.action_fan = false;
             risk.action_pump = false;
+            risk.fan_level_pct = 0;
+            risk.pump_level_pct = 0;
         }
 
         if (manual_fan_on) {
             risk.action_fan = true;
+            risk.fan_level_pct = manual_fan_level_pct;
+        } else {
+            risk.fan_level_pct = risk.action_fan ? 100 : 0;
         }
 
         if (manual_pump_on) {
             risk.action_pump = true;
+            risk.pump_level_pct = manual_pump_level_pct;
+        } else {
+            risk.pump_level_pct = risk.action_pump ? 100 : 0;
+        }
+
+        if (manual_alarm_on) {
+            risk.action_alarm = true;
         }
 
         actuator_ctrl_apply_risk(&risk);
@@ -540,6 +595,9 @@ void app_main(void)
     s_force_safe_mode = false;
     clear_manual_overrides();
     portEXIT_CRITICAL(&s_state_lock);
+
+    actuator_ctrl_set_fan_level(100);
+    actuator_ctrl_set_pump_level(100);
 
     event_log_init(NULL);
     init_sd_card();

@@ -40,14 +40,22 @@ const els = {
   log: document.querySelector('#message-log'),
   clearLog: document.querySelector('#clear-log'),
   fanToggle: document.querySelector('#fan-toggle'),
-  pumpToggle: document.querySelector('#pump-toggle')
+  pumpToggle: document.querySelector('#pump-toggle'),
+  alarmToggle: document.querySelector('#alarm-toggle'),
+  fanSliderPanel: document.querySelector('#fan-slider-panel'),
+  pumpSliderPanel: document.querySelector('#pump-slider-panel'),
+  fanSlider: document.querySelector('#fan-slider'),
+  pumpSlider: document.querySelector('#pump-slider'),
+  fanSliderValue: document.querySelector('#fan-slider-value'),
+  pumpSliderValue: document.querySelector('#pump-slider-value')
 }
 
 const actuatorState = {
-  fan: false,
-  pump: false
+  fan: { on: false, level: 100 },
+  pump: { on: false, level: 100 }
 }
 
+let alarmToggleOn = false
 let socket = null
 let mqttClient = null
 let connectedSource = null
@@ -87,19 +95,40 @@ function boolLabel(value) {
   return value ? '开启' : '关闭'
 }
 
-function updateActuatorButton(actuator) {
-  const button = actuator === 'fan' ? els.fanToggle : els.pumpToggle
-  if (!button) return
-
-  const label = actuator === 'fan' ? '风扇' : '水泵'
-  const isOn = actuatorState[actuator]
-  button.textContent = `${label}：${isOn ? '开启' : '关闭'}`
-  button.classList.toggle('is-on', isOn)
-  button.classList.toggle('is-off', !isOn)
+function updateAlarmToggle() {
+  if (!els.alarmToggle) return
+  els.alarmToggle.textContent = `喇叭：${alarmToggleOn ? '开启' : '关闭'}`
+  els.alarmToggle.classList.toggle('is-on', alarmToggleOn)
+  els.alarmToggle.classList.toggle('is-off', !alarmToggleOn)
 }
 
-function setActuatorState(actuator, isOn) {
-  actuatorState[actuator] = Boolean(isOn)
+function setAlarmToggleState(isOn) {
+  alarmToggleOn = Boolean(isOn)
+  updateAlarmToggle()
+}
+
+function updateActuatorButton(actuator) {
+  const button = actuator === 'fan' ? els.fanToggle : els.pumpToggle
+  const panel = actuator === 'fan' ? els.fanSliderPanel : els.pumpSliderPanel
+  const slider = actuator === 'fan' ? els.fanSlider : els.pumpSlider
+  const value = actuator === 'fan' ? els.fanSliderValue : els.pumpSliderValue
+  if (!button || !panel || !slider || !value) return
+
+  const label = actuator === 'fan' ? '风扇' : '水泵'
+  const { on, level } = actuatorState[actuator]
+  button.textContent = `${label}：${on ? '开启' : '关闭'}`
+  button.classList.toggle('is-on', on)
+  button.classList.toggle('is-off', !on)
+  panel.classList.toggle('hidden', !on)
+  slider.value = String(level)
+  value.textContent = `${level}%`
+}
+
+function setActuatorState(actuator, isOn, levelPct = actuatorState[actuator].level) {
+  actuatorState[actuator] = {
+    on: Boolean(isOn),
+    level: Math.max(0, Math.min(100, Number(levelPct) || 0))
+  }
   updateActuatorButton(actuator)
 }
 
@@ -178,14 +207,17 @@ function handleMessage(topic, payload) {
     els.riskBadge.textContent = label
     els.riskBadge.className = `badge risk-${label}`
     els.riskText.textContent = payload.risk_text ?? label
-    const actions = Array.isArray(payload.actions) ? payload.actions : []
-    const fanOn = actions.includes('fan_on')
-    const pumpOn = actions.includes('pump_on')
+    const fanOn = Boolean(payload.action_fan ?? (Array.isArray(payload.actions) && payload.actions.includes('fan_on')))
+    const pumpOn = Boolean(payload.action_pump ?? (Array.isArray(payload.actions) && payload.actions.includes('pump_on')))
+    const alarmOn = Boolean(payload.action_alarm ?? (Array.isArray(payload.actions) && payload.actions.includes('alarm_on')))
+    const fanLevel = Number.isFinite(Number(payload.fan_level_pct)) ? Number(payload.fan_level_pct) : (fanOn ? 100 : 0)
+    const pumpLevel = Number.isFinite(Number(payload.pump_level_pct)) ? Number(payload.pump_level_pct) : (pumpOn ? 100 : 0)
     els.fan.textContent = boolLabel(fanOn)
     els.pump.textContent = boolLabel(pumpOn)
-    els.alarm.textContent = boolLabel(actions.includes('alarm_on'))
-    setActuatorState('fan', fanOn)
-    setActuatorState('pump', pumpOn)
+    els.alarm.textContent = boolLabel(alarmOn)
+    setActuatorState('fan', fanOn, fanLevel)
+    setActuatorState('pump', pumpOn, pumpLevel)
+    setAlarmToggleState(alarmOn)
   }
 
   if (payload.type === 'status' || topic === 'labguard/indoor/status') {
@@ -291,12 +323,13 @@ function connectMqtt() {
   })
 }
 
-function sendCommand(command) {
+function sendCommand(command, extra = {}) {
   const payload = JSON.stringify({
     node: 'dashboard',
     type: 'command',
     command,
     target_node: 'indoor',
+    ...extra,
     timestamp: Math.floor(Date.now() / 1000)
   })
 
@@ -317,12 +350,37 @@ function sendCommand(command) {
 }
 
 function toggleActuator(actuator) {
-  const nextState = !actuatorState[actuator]
+  const nextState = !actuatorState[actuator].on
+  const level = actuatorState[actuator].level
   const command = `${actuator}_${nextState ? 'on' : 'off'}`
-  setActuatorState(actuator, nextState)
+  setActuatorState(actuator, nextState, level)
 
-  if (!sendCommand(command)) {
-    setActuatorState(actuator, !nextState)
+  if (!sendCommand(command, nextState ? { level_pct: level } : {})) {
+    setActuatorState(actuator, !nextState, level)
+  }
+}
+
+function updateActuatorLevel(actuator, levelPct) {
+  const level = Math.max(0, Math.min(100, Number(levelPct) || 0))
+  const { on } = actuatorState[actuator]
+  setActuatorState(actuator, on, level)
+
+  if (on) {
+    sendCommand(`${actuator}_on`, { level_pct: level })
+  }
+}
+
+function stepActuatorLevel(actuator, delta) {
+  const current = actuatorState[actuator].level
+  updateActuatorLevel(actuator, current + Number(delta))
+}
+
+function toggleAlarm() {
+  const nextState = !alarmToggleOn
+  setAlarmToggleState(nextState)
+
+  if (!sendCommand(`alarm_${nextState ? 'on' : 'off'}`)) {
+    setAlarmToggleState(!nextState)
   }
 }
 
@@ -353,6 +411,18 @@ document.querySelectorAll('[data-toggle-actuator]').forEach((button) => {
   button.addEventListener('click', () => toggleActuator(button.dataset.toggleActuator))
 })
 
+document.querySelectorAll('[data-level-actuator]').forEach((slider) => {
+  slider.addEventListener('input', () => updateActuatorLevel(slider.dataset.levelActuator, slider.value))
+})
+
+document.querySelectorAll('[data-step-actuator]').forEach((button) => {
+  button.addEventListener('click', () => stepActuatorLevel(button.dataset.stepActuator, button.dataset.stepDelta))
+})
+
+els.alarmToggle?.addEventListener('click', () => {
+  toggleAlarm()
+})
+
 els.clearLog.addEventListener('click', () => {
   els.log.innerHTML = ''
 })
@@ -373,6 +443,7 @@ els.mqttUrl.value = savedMqttUrl || defaultMqttUrl
 syncSourceFields()
 setConnection('warn', '未连接')
 updateCameraState('warn', '等待画面')
-setActuatorState('fan', false)
-setActuatorState('pump', false)
+setActuatorState('fan', false, 100)
+setActuatorState('pump', false, 100)
+setAlarmToggleState(false)
 connectMqtt()

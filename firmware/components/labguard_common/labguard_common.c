@@ -199,6 +199,10 @@ const char *labguard_command_type_to_string(labguard_command_type_t type)
         return "pump_on";
     case LABGUARD_CMD_PUMP_OFF:
         return "pump_off";
+    case LABGUARD_CMD_ALARM_ON:
+        return "alarm_on";
+    case LABGUARD_CMD_ALARM_OFF:
+        return "alarm_off";
     case LABGUARD_CMD_NONE:
     default:
         return "none";
@@ -246,6 +250,12 @@ labguard_command_type_t labguard_command_type_from_string(const char *type)
     }
     if (strcmp(type, "pump_off") == 0) {
         return LABGUARD_CMD_PUMP_OFF;
+    }
+    if (strcmp(type, "alarm_on") == 0) {
+        return LABGUARD_CMD_ALARM_ON;
+    }
+    if (strcmp(type, "alarm_off") == 0) {
+        return LABGUARD_CMD_ALARM_OFF;
     }
     return LABGUARD_CMD_NONE;
 }
@@ -370,6 +380,11 @@ char *labguard_risk_state_to_json(const labguard_risk_state_t *state)
     cJSON_AddBoolToObject(root, "flame", state->flame);
     cJSON_AddBoolToObject(root, "gas_alarm", state->gas_alarm);
     cJSON_AddNumberToObject(root, "temperature_c", state->temperature_c);
+    cJSON_AddBoolToObject(root, "action_alarm", state->action_alarm);
+    cJSON_AddBoolToObject(root, "action_fan", state->action_fan);
+    cJSON_AddBoolToObject(root, "action_pump", state->action_pump);
+    cJSON_AddNumberToObject(root, "fan_level_pct", state->fan_level_pct);
+    cJSON_AddNumberToObject(root, "pump_level_pct", state->pump_level_pct);
 
     cJSON *actions = cJSON_AddArrayToObject(root, "actions");
     if (state->action_alarm) {
@@ -407,6 +422,9 @@ char *labguard_command_to_json(const labguard_command_t *command)
     cJSON_AddStringToObject(root, "type", "command");
     cJSON_AddStringToObject(root, "command", labguard_command_type_to_string(command->type));
     cJSON_AddStringToObject(root, "target_node", labguard_node_to_string(command->target_node));
+    if (command->level_pct >= 0) {
+        cJSON_AddNumberToObject(root, "level_pct", command->level_pct);
+    }
     add_timestamp(root, command->timestamp);
     return print_unformatted(root);
 }
@@ -496,9 +514,11 @@ bool labguard_risk_state_from_json(const char *json, labguard_risk_state_t *stat
     state->flame = json_get_bool_or_default(root, "flame", false);
     state->gas_alarm = json_get_bool_or_default(root, "gas_alarm", false);
     state->temperature_c = (float)json_get_double_or_default(root, "temperature_c", 0.0);
-    state->action_alarm = false;
-    state->action_fan = false;
-    state->action_pump = false;
+    state->action_alarm = json_get_bool_or_default(root, "action_alarm", false);
+    state->action_fan = json_get_bool_or_default(root, "action_fan", false);
+    state->action_pump = json_get_bool_or_default(root, "action_pump", false);
+    state->fan_level_pct = json_get_int_or_default(root, "fan_level_pct", state->action_fan ? 100 : 0);
+    state->pump_level_pct = json_get_int_or_default(root, "pump_level_pct", state->action_pump ? 100 : 0);
 
     const cJSON *actions = cJSON_GetObjectItemCaseSensitive(root, "actions");
     if (cJSON_IsArray(actions)) {
@@ -511,8 +531,14 @@ bool labguard_risk_state_from_json(const char *json, labguard_risk_state_t *stat
                 state->action_alarm = true;
             } else if (strcmp(action->valuestring, "fan_on") == 0) {
                 state->action_fan = true;
+                if (state->fan_level_pct <= 0) {
+                    state->fan_level_pct = 100;
+                }
             } else if (strcmp(action->valuestring, "pump_on") == 0) {
                 state->action_pump = true;
+                if (state->pump_level_pct <= 0) {
+                    state->pump_level_pct = 100;
+                }
             }
         }
     }
@@ -578,6 +604,10 @@ bool labguard_command_from_json(const char *json, labguard_command_t *command)
 
     command->type = labguard_command_type_from_string(json_get_string_or_default(root, "command", "none"));
     command->target_node = labguard_node_from_string(json_get_string_or_default(root, "target_node", "unknown"));
+    command->level_pct = json_get_int_or_default(root, "level_pct", -1);
+    if (command->level_pct > 100) {
+        command->level_pct = 100;
+    }
     command->timestamp = json_get_i64_or_default(root, "timestamp", 0);
 
     cJSON_Delete(root);

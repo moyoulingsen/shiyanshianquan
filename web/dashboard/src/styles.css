@@ -309,10 +309,64 @@ dd {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  align-items: flex-start;
 }
 
 .button-row button {
   min-width: 86px;
+}
+
+.actuator-control {
+  min-width: 220px;
+  display: grid;
+  gap: 8px;
+}
+
+.slider-panel {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid #d7dee6;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.slider-panel span {
+  color: #52606d;
+  font-size: 13px;
+}
+
+.slider-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 36px auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.slider-row input[type="range"] {
+  padding: 0;
+}
+
+.step-button {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-color: #b8c3ce;
+  background: #fff;
+  color: #1f2d3a;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.step-button:hover {
+  background: #eef3f8;
+}
+
+.slider-row output {
+  min-width: 56px;
+  text-align: right;
+  color: #17202a;
+  font-weight: 700;
 }
 
 .toggle-control.is-on {
