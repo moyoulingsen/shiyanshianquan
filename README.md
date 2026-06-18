@@ -10,7 +10,7 @@
 
 ### 1. 全部联调一键启动（最常用）
 
-同时启动电脑端 Dashboard、MQTT broker 和手机 Expo：
+同时启动电脑端 Dashboard 和 MQTT broker：
 
 ```bash
 cd /home/lijiaolong/labguard/shiyanshianquan
@@ -121,10 +121,9 @@ WEB_PORT=5175 MQTT_WS_PORT=9002 MQTT_TCP_PORT=1885 ./run_dashboard_stack.sh
 
 ## 网页展示怎么打开
 
-项目里有两个前端页面：
+项目里现在保留的前端页面是：
 
 - [web/dashboard](web/dashboard/)：电脑端监控大屏
-- [web/mobile](web/mobile/)：手机端页面
 
 ### 1. 电脑端 Dashboard 一键启动（推荐）
 
@@ -249,32 +248,3 @@ ws://你的电脑IP:9001
 ws://localhost:9001
 ```
 
-### 6. 手机端页面
-
-手机端页面单独启动：
-
-```bash
-cd /home/lijiaolong/labguard/shiyanshianquan/web/mobile
-npm install
-npm run dev
-```
-
-浏览器打开：
-
-```text
-http://localhost:5174
-```
-
-如果要用手机访问，手机和电脑必须连同一个 Wi‑Fi，然后在手机浏览器打开：
-
-```text
-http://你的电脑IP:5174/
-```
-
-例如：
-
-```text
-http://172.20.10.14:5174/
-```
-
-手机端默认连接运行在 `9001` 端口的 MQTT WebSocket。如果要看到实时数据，电脑端还需要先运行 Dashboard 的一键启动脚本，或者至少启动 [web/dashboard](web/dashboard/) 里的 MQTT broker。

@@ -671,7 +671,6 @@ void app_main(void)
     actuator_ctrl_init();
     actuator_ctrl_set_fan_level(100);
     actuator_ctrl_set_pump_level(100);
-    actuator_ctrl_set_alarm(false);
     audio_prompt_init();
 
     publish_status();
