@@ -425,16 +425,6 @@ esp_err_t sensor_reader_init(void)
     return ESP_OK;
 }
 
-void sensor_reader_set_profile(labguard_profile_t profile)
-{
-    (void)profile;
-}
-
-labguard_profile_t sensor_reader_get_profile(void)
-{
-    return LABGUARD_PROFILE_NORMAL;
-}
-
 i2c_master_bus_handle_t sensor_reader_get_i2c_bus(void)
 {
     return s_i2c_ready ? s_i2c_bus : NULL;

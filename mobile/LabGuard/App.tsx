@@ -99,14 +99,7 @@ export default function App() {
     { label: '发送状态', value: commandStateText }
   ]
 
-  const riskCommandButtons = useMemo(
-    () => [
-      { title: '重置', command: 'reset', tone: 'primary' as const }
-    ],
-    []
-  )
-
-  return (
+    return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -136,7 +129,7 @@ export default function App() {
         <View style={styles.switchRow}>
           <View style={styles.switchTextWrap}>
             <Text style={styles.switchTitle}>显示业务 UI</Text>
-            <Text style={styles.switchDesc}>关闭后只保留最基础项目版外壳；打开后从 Zustand store 读取界面状态。</Text>
+            <Text style={styles.switchDesc}>关闭后只保留基础外壳；打开后显示当前硬件状态与联动控制。</Text>
           </View>
           <Switch value={showBusinessUi} onValueChange={setShowBusinessUi} />
         </View>
@@ -164,13 +157,13 @@ export default function App() {
             <CameraPanel frame={camera} stateText={cameraStateText} stale={cameraStale} />
 
             <View style={styles.panelColumn}>
-              <InfoPanel title="执行器" rows={actuatorRows} badgeText="Stage 4 控制中" />
+              <InfoPanel title="执行器" rows={actuatorRows} badgeText="硬件联动中" />
 
               <View style={styles.panel}>
                 <View style={styles.panelHeader}>
                   <View style={styles.panelHeaderText}>
                     <Text style={styles.panelTitle}>执行器控制</Text>
-                    <Text style={styles.panelDesc}>ActuatorControl 已改为步进加减，不再依赖原生 Slider。</Text>
+                    <Text style={styles.panelDesc}>通过按钮与滑杆调节风扇和水泵输出。</Text>
                   </View>
                   <View style={[styles.alarmBadge, alarmOn ? styles.alarmBadgeOn : styles.alarmBadgeOff]}>
                     <Text style={styles.alarmBadgeText}>{alarmOn ? '报警开启' : '报警关闭'}</Text>

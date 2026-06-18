@@ -16,7 +16,6 @@ firmware/
 │  ├─ camera_capture/        SC2336 + CSI + ISP + EK79007 硬件链路
 │  ├─ actuator_ctrl/         风扇 / 水泵 GPIO + PWM 控制
 │  └─ audio_prompt/          SD 卡 WAV + MAX98357A I2S 播放
-├─ models/                   预留模型目录
 ├─ README.md
 ├─ 项目介绍.md
 └─ B_DELIVERY_NOTES.md

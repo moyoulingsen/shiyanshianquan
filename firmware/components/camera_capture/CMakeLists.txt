@@ -8,9 +8,12 @@ idf_component_register(
         esp_driver_cam
         esp_driver_i2c
         esp_lcd
+        esp_lcd_ek79007
         esp_mm
         esp_psram
         esp_rom
+        esp_cam_sensor
+        esp_sccb_intf
         sensor_reader
         freertos
 )
