@@ -1,9 +1,0 @@
-
-
-# Load bootloader symbols
-set confirm off
-    # Bootloader elf was not found
-set confirm on
-
-# Load application symbols
-file /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/bootloader/bootloader.elf

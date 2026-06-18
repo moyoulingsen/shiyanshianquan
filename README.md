@@ -10,7 +10,7 @@
 
 ### 1. 全部联调一键启动（最常用）
 
-同时启动电脑端 Dashboard 和 MQTT broker：
+同时启动电脑端 Dashboard、MQTT broker 和手机 Expo：
 
 ```bash
 cd /home/lijiaolong/labguard/shiyanshianquan
@@ -179,7 +179,7 @@ WEB_PORT=5175 MQTT_WS_PORT=9002 MQTT_TCP_PORT=1885 ./run_dashboard_stack.sh
 
 ### 3. 单板怎么连网页
 
-如果要让单板的数据出现在网页和手机上，需要把固件里的 MQTT 地址指向运行一键启动脚本的电脑：
+如果要让单板的数据出现在网页和手机 App 上，需要把固件里的 MQTT 地址指向运行一键启动脚本的电脑：
 
 ```text
 CONFIG_LABGUARD_MQTT_URI="mqtt://你的电脑IP:1884"

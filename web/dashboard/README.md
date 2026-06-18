@@ -95,9 +95,9 @@ ws://172.20.10.14:9001
 订阅 topic：
 
 ```text
-labguard/indoor/sensor
-labguard/indoor/risk
-labguard/indoor/status
+labguard/device/sensor
+labguard/device/risk
+labguard/device/status
 labguard/event
 ```
 

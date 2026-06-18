@@ -1,7 +1,0 @@
-path: /content/lab_fire_smoke_train/merged_dataset
-train: images/train
-val: images/val
-test: images/test
-names:
-  0: fire
-  1: smoke

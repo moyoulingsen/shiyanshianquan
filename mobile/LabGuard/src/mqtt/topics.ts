@@ -1,8 +1,8 @@
 export const TOPICS = {
-  sensor: 'labguard/indoor/sensor',
-  risk: 'labguard/indoor/risk',
-  status: 'labguard/indoor/status',
-  camera: 'labguard/indoor/camera',
+  sensor: 'labguard/device/sensor',
+  risk: 'labguard/device/risk',
+  status: 'labguard/device/status',
+  camera: 'labguard/device/camera',
   event: 'labguard/event',
   command: 'labguard/cmd/test'
 } as const

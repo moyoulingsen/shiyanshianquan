@@ -1,10 +1,10 @@
 import mqtt from 'mqtt/dist/mqtt.esm'
 
 const topics = [
-  'labguard/indoor/sensor',
-  'labguard/indoor/risk',
-  'labguard/indoor/status',
-  'labguard/indoor/camera',
+  'labguard/device/sensor',
+  'labguard/device/risk',
+  'labguard/device/status',
+  'labguard/device/camera',
   'labguard/event'
 ]
 
@@ -199,7 +199,7 @@ function handleMessage(topic, payload) {
   updateLastSeen()
   addLog(topic, payload)
 
-  if (payload.type === 'sensor' || topic === 'labguard/indoor/sensor') {
+  if (payload.type === 'sensor' || topic === 'labguard/device/sensor') {
     els.temperature.textContent = formatNumber(payload.temperature_c)
     els.humidity.textContent = formatNumber(payload.humidity_rh)
     els.voc.textContent = Number.isFinite(Number(payload.voc_index)) ? String(payload.voc_index) : '--'
@@ -209,7 +209,7 @@ function handleMessage(topic, payload) {
     els.sensorOk.className = payload.sensor_ok ? 'badge ok' : 'badge warn'
   }
 
-  if (payload.type === 'risk_state' || topic === 'labguard/indoor/risk') {
+  if (payload.type === 'risk_state' || topic === 'labguard/device/risk') {
     const label = riskLabel(payload.risk_level)
     els.riskBadge.textContent = riskDisplayText(payload.risk_level, payload.risk_text)
     els.riskBadge.className = `badge risk-${label}`
@@ -227,13 +227,13 @@ function handleMessage(topic, payload) {
     setAlarmToggleState(alarmOn)
   }
 
-  if (payload.type === 'status' || topic === 'labguard/indoor/status') {
+  if (payload.type === 'status' || topic === 'labguard/device/status') {
     els.uptime.textContent = formatUptime(payload.uptime_s)
     els.rssi.textContent = Number.isFinite(Number(payload.wifi_rssi)) ? `${payload.wifi_rssi} dBm` : '--'
     els.version.textContent = payload.version ?? '--'
   }
 
-  if (payload.type === 'camera_frame' || topic === 'labguard/indoor/camera') {
+  if (payload.type === 'camera_frame' || topic === 'labguard/device/camera') {
     updateCamera(payload)
   }
 }

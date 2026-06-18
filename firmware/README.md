@@ -27,7 +27,8 @@ firmware/
 - 所有演示型/模拟型危险识别代码。
 - 所有视觉推理 POC、导出脚本、演示工具脚本。
 - 所有 `force_*`、`selftest`、mock/profile 相关主流程依赖。
-- `esp_outdoor/` 整套旧工程。
+- `esp_outdoor/`、`esp_indoor/` 旧工程。
+- `espdl_probe` 探针组件。
 
 ## 当前系统含义
 

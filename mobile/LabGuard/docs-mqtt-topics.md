@@ -2,10 +2,10 @@
 
 当前 React Native 版 LabGuard 直接复用现有网页端 topic：
 
-- `labguard/indoor/sensor`
-- `labguard/indoor/risk`
-- `labguard/indoor/status`
-- `labguard/indoor/camera`
+- `labguard/device/sensor`
+- `labguard/device/risk`
+- `labguard/device/status`
+- `labguard/device/camera`
 - `labguard/event`
 - `labguard/cmd/test`
 
@@ -35,7 +35,7 @@ App 会向以下 topic 发布：
   "node": "mobile",
   "type": "command",
   "command": "fan_on",
-  "target_node": "indoor",
+  "target_node": "device",
   "level_pct": 80,
   "timestamp": 1710000000
 }

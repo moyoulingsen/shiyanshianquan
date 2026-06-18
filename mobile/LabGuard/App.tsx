@@ -101,11 +101,7 @@ export default function App() {
 
   const riskCommandButtons = useMemo(
     () => [
-      { title: '重置', command: 'reset', tone: 'primary' as const },
-      { title: '正常', command: 'force_normal', tone: 'normal' as const },
-      { title: '高温预警', command: 'force_warning', tone: 'warning' as const },
-      { title: '有毒气体事件', command: 'force_alarm', tone: 'danger' as const },
-      { title: '火灾事件', command: 'force_emergency', tone: 'danger' as const }
+      { title: '重置', command: 'reset', tone: 'primary' as const }
     ],
     []
   )
@@ -117,7 +113,7 @@ export default function App() {
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>LabGuard</Text>
-            <Text style={styles.subtitle}>Stage 4 执行器控制</Text>
+            <Text style={styles.subtitle}>硬件联动控制</Text>
           </View>
           <Pressable style={[styles.connectButton, connected ? styles.disconnectButton : null]} onPress={handleConnectToggle}>
             <Text style={styles.connectButtonText}>{connected ? '断开' : '连接'}</Text>
@@ -134,7 +130,7 @@ export default function App() {
             onChangeText={setBrokerUrl}
             placeholder={DEFAULT_BROKER_URL}
           />
-          <Text style={styles.helperText}>默认 broker 使用当前电脑局域网地址 {DEFAULT_BROKER_URL}；保持 Stage 3 手动连接方式，点击右上角“连接”后再收发 MQTT。</Text>
+          <Text style={styles.helperText}>默认 broker 使用当前电脑局域网地址 {DEFAULT_BROKER_URL}；点击右上角“连接”后再收发 MQTT。</Text>
         </View>
 
         <View style={styles.switchRow}>
@@ -191,19 +187,7 @@ export default function App() {
                 </Pressable>
               </View>
 
-              <View style={styles.panel}>
-                <View style={styles.panelHeader}>
-                  <View style={styles.panelHeaderText}>
-                    <Text style={styles.panelTitle}>风险演示</Text>
-                    <Text style={styles.panelDesc}>{commandStateText}</Text>
-                  </View>
-                </View>
-                <View style={styles.commandGrid}>
-                  {riskCommandButtons.map((item) => (
-                    <CommandButton key={item.command} title={item.title} tone={item.tone} onPress={() => sendCommand(item.command)} />
-                  ))}
-                </View>
-              </View>
+
 
               <InfoPanel title="节点状态" rows={nodeRows} />
             </View>
