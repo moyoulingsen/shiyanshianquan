@@ -5,13 +5,15 @@ idf_component_register(
         labguard_common
         labguard_net
         event_log
+        sensor_reader
+        hazard_infer
+        risk_fusion
+        actuator_ctrl
+        audio_prompt
         camera_capture
         espdl_probe
-        ppe_infer
-        door_fsm
-        ui_lvgl
-        audio_prompt
-        led_status
+        mbedtls
+        esp_driver_jpeg
         fatfs
         sdmmc
 )

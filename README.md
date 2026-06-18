@@ -2,6 +2,10 @@
 
 实验室安全大作业。
 
+## 当前方向
+
+本项目已调整为**单块 ESP32-P4 板子完成完整闭环**：同一块板同时负责视觉识别、环境感知、风险判断、声光联动、排风控制和云端告警，不再强调双板协同。
+
 ## 常用启动命令（放这里，优先看这个）
 
 ### 1. 全部联调一键启动（最常用）
@@ -16,7 +20,7 @@ cd /home/lijiaolong/labguard/shiyanshianquan
 这个脚本会自动启动：
 
 - [web/dashboard](web/dashboard/)：电脑端监控网页
-- 本地 MQTT broker：板子和网页/手机共用
+- 本地 MQTT broker：单板和网页/手机共用
 - [mobile/LabGuard](mobile/LabGuard/)：Expo 手机 App 服务
 
 启动成功后终端会打印这些地址，照着填就行：
@@ -64,7 +68,7 @@ cd /home/lijiaolong/labguard/shiyanshianquan/mobile/LabGuard
 FORCE_FREE_PORTS=0 ./run_mobile_app.sh
 ```
 
-### 4. 板子 MQTT 配置
+### 4. 单板 MQTT 配置
 
 烧录前在 `idf.py menuconfig` 里确认：
 
@@ -76,22 +80,10 @@ CONFIG_LABGUARD_MQTT_URI="mqtt://你的电脑IP:1884"
 
 `你的电脑IP` 直接看 `./run_labguard_stack.sh` 或 `./run_dashboard_stack.sh` 启动时打印的 `板子 MQTT` 地址。
 
-### 5. 室内/室外板烧录和监视
-
-室内节点：
+### 5. 单板烧录和监视
 
 ```bash
-cd /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor
-. /home/lijiaolong/esp/esp-idf/export.sh
-idf.py set-target esp32p4
-idf.py menuconfig
-idf.py -p <串口> flash monitor
-```
-
-室外节点：
-
-```bash
-cd /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_outdoor
+cd /home/lijiaolong/labguard/shiyanshianquan/firmware
 . /home/lijiaolong/esp/esp-idf/export.sh
 idf.py set-target esp32p4
 idf.py menuconfig
@@ -186,9 +178,9 @@ WEB_PORT=5175 MQTT_WS_PORT=9002 MQTT_TCP_PORT=1885 ./run_dashboard_stack.sh
 
 注意：MQTT 端口改了以后，固件和网页里的连接地址也要对应修改。
 
-### 3. ESP32 固件怎么连网页
+### 3. 单板怎么连网页
 
-如果要让 `esp_indoor` 或 `esp_outdoor` 的数据出现在网页和手机上，需要把固件里的 MQTT 地址指向运行一键启动脚本的电脑：
+如果要让单板的数据出现在网页和手机上，需要把固件里的 MQTT 地址指向运行一键启动脚本的电脑：
 
 ```text
 CONFIG_LABGUARD_MQTT_URI="mqtt://你的电脑IP:1884"
@@ -203,21 +195,10 @@ CONFIG_LABGUARD_WIFI_PASSWORD="你的密码"
 
 启动 Dashboard 后，终端会打印当前电脑 IP 和应该填入板子的 MQTT 地址，可以直接照着终端输出配置。
 
-### 4. 板子烧录命令
-
-室内节点：
+### 4. 单板烧录命令
 
 ```bash
-cd /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor
-idf.py set-target esp32p4
-idf.py menuconfig
-idf.py -p <串口> flash monitor
-```
-
-室外节点：
-
-```bash
-cd /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_outdoor
+cd /home/lijiaolong/labguard/shiyanshianquan/firmware
 idf.py set-target esp32p4
 idf.py menuconfig
 idf.py -p <串口> flash monitor

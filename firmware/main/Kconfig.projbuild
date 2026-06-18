@@ -4,7 +4,7 @@ menu "LabGuard network"
         string "Wi-Fi SSID"
         default ""
         help
-            2.4 GHz Wi-Fi SSID used by the outdoor node.
+            2.4 GHz Wi-Fi SSID used by the indoor node.
 
     config LABGUARD_WIFI_PASSWORD
         string "Wi-Fi password"
