@@ -76,6 +76,28 @@ def parse_args() -> argparse.Namespace:
         default=1,
         help="Verbosity passed to the quantization script.",
     )
+    parser.add_argument(
+        "--bits",
+        type=int,
+        default=8,
+        choices=[8, 16],
+        help="Quantization bit width passed to esp-ppq.",
+    )
+    parser.add_argument(
+        "--hi-precision",
+        action="store_true",
+        help="Use ESP-DL hi-precision INT16 target when --bits=16.",
+    )
+    parser.add_argument(
+        "--skip-error-report",
+        action="store_true",
+        help="Skip esp-ppq graph/layer error analysis to speed up export experiments.",
+    )
+    parser.add_argument(
+        "--no-export-config",
+        action="store_true",
+        help="Do not export the auxiliary quantization config sidecar.",
+    )
     return parser.parse_args()
 
 
@@ -126,11 +148,20 @@ def main() -> int:
         str(args.calib_dir),
         "--calib-steps",
         str(args.calib_steps),
+        "--bits",
+        str(args.bits),
         "--device",
         args.device,
         "--verbose",
         str(args.verbose),
     ]
+
+    if args.hi_precision:
+        command.append("--hi-precision")
+    if args.skip_error_report:
+        command.append("--skip-error-report")
+    if args.no_export_config:
+        command.append("--no-export-config")
 
     print("Running:", " ".join(command), flush=True)
     completed = subprocess.run(command, check=False)

@@ -36681,34 +36681,89 @@
                         "range": null,
                         "title": "Pump channel is active low",
                         "type": "bool"
-                    },
-                    {
-                        "children": [],
-                        "depends_on": null,
-                        "help": "Optional third channel used to flag risk_level >= ALARM. Leave at\n-1 if unused.",
-                        "id": "LABGUARD_ACTUATOR_ALARM_GPIO",
-                        "name": "LABGUARD_ACTUATOR_ALARM_GPIO",
-                        "range": [
-                            -1,
-                            54
-                        ],
-                        "title": "Alarm output GPIO (buzzer/LED, optional)",
-                        "type": "int"
-                    },
-                    {
-                        "children": [],
-                        "depends_on": null,
-                        "help": null,
-                        "id": "LABGUARD_ACTUATOR_ALARM_ACTIVE_LOW",
-                        "name": "LABGUARD_ACTUATOR_ALARM_ACTIVE_LOW",
-                        "range": null,
-                        "title": "Alarm channel is active low",
-                        "type": "bool"
                     }
                 ],
                 "depends_on": null,
                 "id": "component-config-labguard-indoor-actuator-control-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-components-actuator_ctrl-Kconfig-1",
                 "title": "LabGuard indoor actuator control",
+                "type": "menu"
+            },
+            {
+                "children": [
+                    {
+                        "children": [
+                            {
+                                "children": [],
+                                "depends_on": "LABGUARD_AUDIO_PROMPT_I2S_WAV",
+                                "help": null,
+                                "id": "LABGUARD_AUDIO_PROMPT_SD_MOUNT_POINT",
+                                "name": "LABGUARD_AUDIO_PROMPT_SD_MOUNT_POINT",
+                                "range": null,
+                                "title": "Audio prompt SD card mount point",
+                                "type": "string"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "LABGUARD_AUDIO_PROMPT_I2S_WAV",
+                                "help": null,
+                                "id": "LABGUARD_AUDIO_PROMPT_DIR",
+                                "name": "LABGUARD_AUDIO_PROMPT_DIR",
+                                "range": null,
+                                "title": "Audio prompt directory on SD card",
+                                "type": "string"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "LABGUARD_AUDIO_PROMPT_I2S_WAV",
+                                "help": null,
+                                "id": "LABGUARD_AUDIO_PROMPT_I2S_DOUT_GPIO",
+                                "name": "LABGUARD_AUDIO_PROMPT_I2S_DOUT_GPIO",
+                                "range": [
+                                    -1,
+                                    54
+                                ],
+                                "title": "MAX98357A DIN GPIO",
+                                "type": "int"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "LABGUARD_AUDIO_PROMPT_I2S_WAV",
+                                "help": null,
+                                "id": "LABGUARD_AUDIO_PROMPT_I2S_BCLK_GPIO",
+                                "name": "LABGUARD_AUDIO_PROMPT_I2S_BCLK_GPIO",
+                                "range": [
+                                    -1,
+                                    54
+                                ],
+                                "title": "MAX98357A BCLK GPIO",
+                                "type": "int"
+                            },
+                            {
+                                "children": [],
+                                "depends_on": "LABGUARD_AUDIO_PROMPT_I2S_WAV",
+                                "help": null,
+                                "id": "LABGUARD_AUDIO_PROMPT_I2S_WS_GPIO",
+                                "name": "LABGUARD_AUDIO_PROMPT_I2S_WS_GPIO",
+                                "range": [
+                                    -1,
+                                    54
+                                ],
+                                "title": "MAX98357A LRC/WS GPIO",
+                                "type": "int"
+                            }
+                        ],
+                        "depends_on": null,
+                        "help": "Play fixed PCM WAV alarm files from the mounted SD card through a\nMAX98357A-compatible I2S amplifier. If disabled, audio_prompt only\nrecords and logs the selected prompt.",
+                        "id": "LABGUARD_AUDIO_PROMPT_I2S_WAV",
+                        "name": "LABGUARD_AUDIO_PROMPT_I2S_WAV",
+                        "range": null,
+                        "title": "Play indoor alarm prompts from SD card over I2S",
+                        "type": "bool"
+                    }
+                ],
+                "depends_on": null,
+                "id": "component-config-labguard-indoor-audio-prompts-home-lijiaolong-labguard-shiyanshianquan-firmware-esp_indoor-components-audio_prompt-Kconfig-1",
+                "title": "LabGuard indoor audio prompts",
                 "type": "menu"
             },
             {

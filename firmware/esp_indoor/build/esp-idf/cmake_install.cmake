@@ -779,6 +779,11 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
+  include("/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/audio_prompt/cmake_install.cmake")
+endif()
+
+if(NOT CMAKE_INSTALL_LOCAL_ONLY)
+  # Include the install script for the subdirectory.
   include("/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espressif__esp_sccb_intf/cmake_install.cmake")
 endif()
 

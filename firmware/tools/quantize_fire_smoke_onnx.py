@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import math
 from pathlib import Path
 from typing import Iterable, List
@@ -56,6 +57,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bits", type=int, default=8, choices=[8, 16], help="Quantization bit width")
     parser.add_argument("--device", default="cpu", choices=["cpu", "cuda"], help="Execution device")
     parser.add_argument("--verbose", type=int, default=1, help="esp-ppq verbosity")
+    parser.add_argument(
+        "--hi-precision",
+        action="store_true",
+        help="Use ESP-DL hi-precision INT16 target when --bits=16.",
+    )
+    parser.add_argument(
+        "--skip-error-report",
+        action="store_true",
+        help="Skip esp-ppq graph/layer error analysis to speed up experiments.",
+    )
+    parser.add_argument(
+        "--no-export-config",
+        action="store_true",
+        help="Do not export the auxiliary quantization config sidecar.",
+    )
     return parser.parse_args()
 
 
@@ -70,6 +86,13 @@ def collate_fn(batch: torch.Tensor) -> torch.Tensor:
     if isinstance(batch, list):
         return torch.stack(batch, dim=0)
     return batch
+
+
+def package_version(name: str) -> str:
+    try:
+        return importlib.metadata.version(name)
+    except importlib.metadata.PackageNotFoundError:
+        return "not-installed"
 
 
 def main() -> int:
@@ -104,7 +127,13 @@ def main() -> int:
     print(f"Calib dir  : {args.calib_dir}")
     print(f"Images     : {len(dataset)}")
     print(f"Calib steps: {effective_steps}")
+    print(f"Bits       : {args.bits}")
+    print(f"Hi-prec    : {args.hi_precision}")
     print(f"Device     : {args.device}")
+    print(f"esp-ppq    : {package_version('esp-ppq')}")
+    print(f"onnx       : {package_version('onnx')}")
+    print(f"flatbuffers: {package_version('flatbuffers')}")
+    print(f"torch      : {torch.__version__}")
 
     espdl_quantize_onnx(
         onnx_import_file=str(args.onnx),
@@ -117,11 +146,12 @@ def main() -> int:
         collate_fn=collate_fn,
         setting=setting,
         device=args.device,
-        error_report=True,
+        error_report=not args.skip_error_report,
         skip_export=False,
-        export_config=True,
+        export_config=not args.no_export_config,
         export_test_values=False,
         verbose=args.verbose,
+        hi_precision=args.hi_precision,
     )
 
     if not args.output.exists():

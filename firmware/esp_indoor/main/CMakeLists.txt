@@ -9,6 +9,7 @@ idf_component_register(
         hazard_infer
         risk_fusion
         actuator_ctrl
+        audio_prompt
         camera_capture
         espdl_probe
         mbedtls

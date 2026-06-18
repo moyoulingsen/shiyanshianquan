@@ -5,7 +5,6 @@
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "esp_log.h"
-#include "esp_timer.h"
 #include "sdkconfig.h"
 
 #ifdef CONFIG_LABGUARD_ACTUATOR_FAN_ACTIVE_LOW
@@ -18,12 +17,6 @@
 #define PUMP_ACTIVE_LOW 1
 #else
 #define PUMP_ACTIVE_LOW 0
-#endif
-
-#ifdef CONFIG_LABGUARD_ACTUATOR_ALARM_ACTIVE_LOW
-#define ALARM_ACTIVE_LOW 1
-#else
-#define ALARM_ACTIVE_LOW 0
 #endif
 
 #define ACTUATOR_LEDC_MODE LEDC_LOW_SPEED_MODE
@@ -149,36 +142,6 @@ static void set_pwm_level(int gpio_num, ledc_channel_t channel, int level_pct, b
     }
 }
 
-static void drive(int gpio_num, bool on, bool active_low)
-{
-    if (gpio_num < 0) {
-        return;
-    }
-    int level = on ? 1 : 0;
-    if (active_low) {
-        level = !level;
-    }
-    gpio_set_level(gpio_num, level);
-}
-
-static bool alarm_output_on(const labguard_risk_state_t *risk)
-{
-    if (risk == NULL || !risk->action_alarm) {
-        return false;
-    }
-
-    if (risk->risk_level < LABGUARD_RISK_ALARM) {
-        return true;
-    }
-
-    if (risk->risk_level >= LABGUARD_RISK_EMERGENCY) {
-        return true;
-    }
-
-    int64_t tick_ms = esp_timer_get_time() / 1000;
-    return ((tick_ms / 500) % 2) == 0;
-}
-
 esp_err_t actuator_ctrl_init(void)
 {
     memset(&s_last_risk, 0, sizeof(s_last_risk));
@@ -189,18 +152,15 @@ esp_err_t actuator_ctrl_init(void)
 
     configure_output(CONFIG_LABGUARD_ACTUATOR_FAN_GPIO);
     configure_output(CONFIG_LABGUARD_ACTUATOR_PUMP_GPIO);
-    configure_output(CONFIG_LABGUARD_ACTUATOR_ALARM_GPIO);
     configure_ledc_channel(CONFIG_LABGUARD_ACTUATOR_FAN_GPIO, ACTUATOR_LEDC_FAN_CHANNEL, FAN_ACTIVE_LOW);
     configure_ledc_channel(CONFIG_LABGUARD_ACTUATOR_PUMP_GPIO, ACTUATOR_LEDC_PUMP_CHANNEL, PUMP_ACTIVE_LOW);
 
     set_pwm_level(CONFIG_LABGUARD_ACTUATOR_FAN_GPIO, ACTUATOR_LEDC_FAN_CHANNEL, 0, FAN_ACTIVE_LOW);
     set_pwm_level(CONFIG_LABGUARD_ACTUATOR_PUMP_GPIO, ACTUATOR_LEDC_PUMP_CHANNEL, 0, PUMP_ACTIVE_LOW);
-    drive(CONFIG_LABGUARD_ACTUATOR_ALARM_GPIO, false, ALARM_ACTIVE_LOW);
 
-    ESP_LOGI(TAG, "actuator controller initialized fan=GPIO%d pump=GPIO%d alarm=GPIO%d",
+    ESP_LOGI(TAG, "actuator controller initialized fan=GPIO%d pump=GPIO%d",
              CONFIG_LABGUARD_ACTUATOR_FAN_GPIO,
-             CONFIG_LABGUARD_ACTUATOR_PUMP_GPIO,
-             CONFIG_LABGUARD_ACTUATOR_ALARM_GPIO);
+             CONFIG_LABGUARD_ACTUATOR_PUMP_GPIO);
     return ESP_OK;
 }
 
@@ -232,7 +192,6 @@ esp_err_t actuator_ctrl_apply_risk(const labguard_risk_state_t *risk)
                   ACTUATOR_LEDC_PUMP_CHANNEL,
                   risk->action_pump ? s_last_risk.pump_level_pct : 0,
                   PUMP_ACTIVE_LOW);
-    drive(CONFIG_LABGUARD_ACTUATOR_ALARM_GPIO, alarm_output_on(risk), ALARM_ACTIVE_LOW);
 
     ESP_LOGI(TAG,
              "risk=%s alarm=%d fan=%d(%d%%) pump=%d(%d%%) temp=%.1f",
@@ -297,14 +256,6 @@ esp_err_t actuator_ctrl_set_pump_level(int level_pct)
                       PUMP_ACTIVE_LOW);
     }
     ESP_LOGI(TAG, "manual pump level=%d%%", s_last_risk.pump_level_pct);
-    return ESP_OK;
-}
-
-esp_err_t actuator_ctrl_set_alarm(bool on)
-{
-    s_last_risk.action_alarm = on;
-    drive(CONFIG_LABGUARD_ACTUATOR_ALARM_GPIO, on, ALARM_ACTIVE_LOW);
-    ESP_LOGI(TAG, "manual alarm=%d", on);
     return ESP_OK;
 }
 

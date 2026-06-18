@@ -27,16 +27,4 @@ menu "LabGuard indoor actuator control"
         bool "Pump channel is active low"
         default n
 
-    config LABGUARD_ACTUATOR_ALARM_GPIO
-        int "Alarm output GPIO (buzzer/LED, optional)"
-        range -1 54
-        default -1
-        help
-            Optional third channel used to flag risk_level >= ALARM. Leave at
-            -1 if unused.
-
-    config LABGUARD_ACTUATOR_ALARM_ACTIVE_LOW
-        bool "Alarm channel is active low"
-        default n
-
 endmenu

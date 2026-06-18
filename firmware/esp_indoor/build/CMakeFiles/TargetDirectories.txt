@@ -1203,6 +1203,13 @@
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/actuator_ctrl/CMakeFiles/install.dir
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/actuator_ctrl/CMakeFiles/install/local.dir
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/actuator_ctrl/CMakeFiles/install/strip.dir
+/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/audio_prompt/CMakeFiles/__idf_audio_prompt.dir
+/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/audio_prompt/CMakeFiles/edit_cache.dir
+/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/audio_prompt/CMakeFiles/rebuild_cache.dir
+/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/audio_prompt/CMakeFiles/list_install_components.dir
+/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/audio_prompt/CMakeFiles/install.dir
+/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/audio_prompt/CMakeFiles/install/local.dir
+/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/audio_prompt/CMakeFiles/install/strip.dir
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espressif__esp_sccb_intf/CMakeFiles/__idf_espressif__esp_sccb_intf.dir
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espressif__esp_sccb_intf/CMakeFiles/edit_cache.dir
 /home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor/build/esp-idf/espressif__esp_sccb_intf/CMakeFiles/rebuild_cache.dir

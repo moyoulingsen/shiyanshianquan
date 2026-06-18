@@ -9,6 +9,7 @@
 #include "freertos/task.h"
 
 #include "actuator_ctrl.h"
+#include "audio_prompt.h"
 #include "driver/jpeg_encode.h"
 #include "driver/sdmmc_host.h"
 #include "event_log.h"
@@ -126,6 +127,43 @@ static void clear_manual_overrides(void)
     s_manual_alarm_on = false;
     s_manual_fan_level_pct = 100;
     s_manual_pump_level_pct = 100;
+}
+
+static audio_prompt_t prompt_for_risk(const labguard_risk_state_t *risk)
+{
+    if (risk == NULL) {
+        return AUDIO_PROMPT_TOXIC_GAS;
+    }
+    if (risk->risk_level >= LABGUARD_RISK_EMERGENCY || risk->flame) {
+        return AUDIO_PROMPT_FIRE;
+    }
+    if (risk->risk_level >= LABGUARD_RISK_ALARM) {
+        return AUDIO_PROMPT_TOXIC_GAS;
+    }
+    return AUDIO_PROMPT_MANUAL_ALARM;
+}
+
+static void play_alarm_prompt_if_needed(labguard_risk_level_t previous_level,
+                                        const labguard_risk_state_t *risk,
+                                        bool manual_alarm_on)
+{
+    if (risk == NULL) {
+        return;
+    }
+
+    if (manual_alarm_on && previous_level < LABGUARD_RISK_ALARM) {
+        audio_prompt_play(AUDIO_PROMPT_MANUAL_ALARM);
+        return;
+    }
+
+    if (risk->risk_level >= LABGUARD_RISK_ALARM && previous_level < LABGUARD_RISK_ALARM) {
+        audio_prompt_play(prompt_for_risk(risk));
+        return;
+    }
+
+    if (risk->risk_level >= LABGUARD_RISK_EMERGENCY && previous_level < LABGUARD_RISK_EMERGENCY) {
+        audio_prompt_play(AUDIO_PROMPT_FIRE);
+    }
 }
 
 static uint8_t expand_rgb565_component(uint16_t value, int bits)
@@ -332,7 +370,6 @@ static void apply_command(const labguard_command_t *command)
         portEXIT_CRITICAL(&s_state_lock);
         actuator_ctrl_set_fan(false);
         actuator_ctrl_set_pump(false);
-        actuator_ctrl_set_alarm(false);
         publish_event(LABGUARD_RISK_NORMAL, "indoor_reset", "clear_forced_mode");
         break;
     case LABGUARD_CMD_SELFTEST:
@@ -359,7 +396,6 @@ static void apply_command(const labguard_command_t *command)
         portEXIT_CRITICAL(&s_state_lock);
         actuator_ctrl_set_fan(false);
         actuator_ctrl_set_pump(false);
-        actuator_ctrl_set_alarm(false);
         set_all_profiles(LABGUARD_PROFILE_NORMAL);
         publish_event(LABGUARD_RISK_NORMAL, "indoor_profile_normal", "force_safe_mode");
         break;
@@ -423,15 +459,14 @@ static void apply_command(const labguard_command_t *command)
         portENTER_CRITICAL(&s_state_lock);
         s_manual_alarm_on = true;
         portEXIT_CRITICAL(&s_state_lock);
-        actuator_ctrl_set_alarm(true);
-        publish_event(LABGUARD_RISK_NORMAL, "manual_alarm_on", "alarm_on");
+        audio_prompt_play(AUDIO_PROMPT_MANUAL_ALARM);
+        publish_event(LABGUARD_RISK_NORMAL, "manual_alarm_on", "voice_alarm_on");
         break;
     case LABGUARD_CMD_ALARM_OFF:
         portENTER_CRITICAL(&s_state_lock);
         s_manual_alarm_on = false;
         portEXIT_CRITICAL(&s_state_lock);
-        actuator_ctrl_set_alarm(false);
-        publish_event(LABGUARD_RISK_NORMAL, "manual_alarm_off", "alarm_off");
+        publish_event(LABGUARD_RISK_NORMAL, "manual_alarm_off", "voice_alarm_off");
         break;
     case LABGUARD_CMD_NONE:
     default:
@@ -542,6 +577,7 @@ static void indoor_task(void *arg)
         }
 
         actuator_ctrl_apply_risk(&risk);
+        play_alarm_prompt_if_needed(last_level, &risk, manual_alarm_on);
 
         publish_json(LABGUARD_TOPIC_INDOOR_SENSOR, labguard_sensor_data_to_json(&sensor));
         publish_json(LABGUARD_TOPIC_INDOOR_RISK, labguard_risk_state_to_json(&risk));
@@ -629,6 +665,7 @@ void app_main(void)
 #endif
     risk_fusion_init();
     actuator_ctrl_init();
+    audio_prompt_init();
 
     publish_status();
     publish_event(LABGUARD_RISK_NORMAL, "indoor_boot", "camera_sensor_actuator_ready");

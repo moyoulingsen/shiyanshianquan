@@ -234,6 +234,7 @@ $<TARGET_FILE:idf::risk_fusion>
 $<TARGET_FILE:__idf_hazard_infer>
 $<TARGET_FILE:idf::actuator_ctrl>
 $<TARGET_FILE:__idf_esp_driver_ledc>
+$<TARGET_FILE:idf::audio_prompt>
 $<TARGET_FILE:idf::espressif__esp_sccb_intf>
 $<TARGET_FILE:idf::espressif__esp_cam_sensor>
 $<TARGET_FILE:__idf_espressif__esp_sccb_intf>
@@ -256,6 +257,7 @@ $<TARGET_FILE:__idf_labguard_net>
 $<TARGET_FILE:__idf_event_log>
 $<TARGET_FILE:__idf_risk_fusion>
 $<TARGET_FILE:__idf_actuator_ctrl>
+$<TARGET_FILE:__idf_audio_prompt>
 $<TARGET_FILE:__idf_camera_capture>
 $<TARGET_FILE:__idf_espdl_probe>
 $<TARGET_FILE:__idf_fatfs>
