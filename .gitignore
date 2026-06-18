@@ -1,9 +1,16 @@
-# ESP-IDF build artifacts
+# Firmware / ESP-IDF build artifacts
 build/
+build-*/
 managed_components/
 sdkconfig
 sdkconfig.old
 dependencies.lock
+
+# Node / web builds
+node_modules/
+dist/
+web-build/
+.expo/
 
 # Python
 __pycache__/
@@ -12,6 +19,9 @@ __pycache__/
 .venv/
 .venv-*/
 venv/
+
+# Claude / local tooling
+.claude/
 
 # IDE / editor
 .vscode/*

@@ -25,13 +25,10 @@ esp_err_t risk_fusion_evaluate(const labguard_sensor_data_t *sensor,
     bool temp_high = sensor->temperature_c >= 38.0f;
     bool voc_high = sensor->voc_index >= 180;
 
-    if (hazard->flame && hazard->score_flame >= 0.70f) {
-        level = LABGUARD_RISK_EMERGENCY;
-        risk_text = "fire_event";
-    } else if ((hazard->smoke && sensor->mq2_alarm) || (sensor->mq2_alarm && temp_high)) {
+    if ((hazard->smoke && sensor->mq2_alarm) || (sensor->mq2_alarm && temp_high)) {
         level = LABGUARD_RISK_ALARM;
         risk_text = "toxic_gas_event";
-    } else if ((hazard->smoke && hazard->score_smoke >= 0.50f) || temp_high || voc_high || sensor->mq2_alarm) {
+    } else if (temp_high || voc_high || sensor->mq2_alarm) {
         level = LABGUARD_RISK_WARNING;
         risk_text = "warning";
     }
@@ -44,9 +41,10 @@ esp_err_t risk_fusion_evaluate(const labguard_sensor_data_t *sensor,
     out->temperature_c = sensor->temperature_c;
     out->action_alarm = level >= LABGUARD_RISK_ALARM;
     out->action_fan = level >= LABGUARD_RISK_ALARM;
-    out->action_pump = level >= LABGUARD_RISK_EMERGENCY;
+    out->action_pump = false;
+    out->fan_level_pct = out->action_fan ? 100 : 0;
+    out->pump_level_pct = 0;
     out->model = hazard->model;
     out->timestamp = esp_timer_get_time() / 1000000;
     return ESP_OK;
 }
-

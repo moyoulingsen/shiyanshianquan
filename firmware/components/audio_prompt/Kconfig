@@ -1,0 +1,26 @@
+menu "LabGuard hardware audio prompt"
+
+    config LABGUARD_AUDIO_PROMPT_SD_MOUNT_POINT
+        string "Audio prompt SD card mount point"
+        default "/sdcard"
+
+    config LABGUARD_AUDIO_PROMPT_DIR
+        string "Audio prompt directory on SD card"
+        default "/audio"
+
+    config LABGUARD_AUDIO_PROMPT_I2S_DOUT_GPIO
+        int "MAX98357A DIN GPIO"
+        range -1 54
+        default 20
+
+    config LABGUARD_AUDIO_PROMPT_I2S_BCLK_GPIO
+        int "MAX98357A BCLK GPIO"
+        range -1 54
+        default 21
+
+    config LABGUARD_AUDIO_PROMPT_I2S_WS_GPIO
+        int "MAX98357A LRC/WS GPIO"
+        range -1 54
+        default 22
+
+endmenu

@@ -6,15 +6,12 @@ idf_component_register(
         labguard_net
         event_log
         sensor_reader
-        hazard_infer
         risk_fusion
         actuator_ctrl
         audio_prompt
         camera_capture
-        espdl_probe
         mbedtls
         esp_driver_jpeg
         fatfs
         sdmmc
 )
-

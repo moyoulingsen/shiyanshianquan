@@ -1,0 +1,21 @@
+menu "LabGuard hardware actuator control"
+
+    config LABGUARD_ACTUATOR_FAN_GPIO
+        int "Fan MOSFET gate GPIO"
+        range -1 54
+        default 5
+
+    config LABGUARD_ACTUATOR_FAN_ACTIVE_LOW
+        bool "Fan channel is active low"
+        default n
+
+    config LABGUARD_ACTUATOR_PUMP_GPIO
+        int "Pump MOSFET gate GPIO"
+        range -1 54
+        default 6
+
+    config LABGUARD_ACTUATOR_PUMP_ACTIVE_LOW
+        bool "Pump channel is active low"
+        default n
+
+endmenu

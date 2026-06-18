@@ -5,7 +5,6 @@
 #include <string.h>
 
 #include "freertos/FreeRTOS.h"
-#include "freertos/portmacro.h"
 #include "freertos/task.h"
 
 #include "actuator_ctrl.h"
@@ -13,13 +12,10 @@
 #include "driver/jpeg_encode.h"
 #include "driver/sdmmc_host.h"
 #include "event_log.h"
-#include "esp_heap_caps.h"
-#include "esp_log.h"
 #include "esp_ldo_regulator.h"
+#include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_vfs_fat.h"
-#include "espdl_probe.h"
-#include "hazard_infer.h"
 #include "indoor_camera_capture.h"
 #include "labguard_common.h"
 #include "labguard_net.h"
@@ -29,29 +25,21 @@
 #include "sdkconfig.h"
 #include "sensor_reader.h"
 
-static const char *TAG = "labguard_indoor";
-static portMUX_TYPE s_state_lock = portMUX_INITIALIZER_UNLOCKED;
+static const char *TAG = "labguard_device";
 
-static bool s_force_safe_mode;
-static bool s_manual_fan_on;
-static bool s_manual_pump_on;
-static bool s_manual_alarm_on;
-static int s_manual_fan_level_pct;
-static int s_manual_pump_level_pct;
-
-#define CAMERA_PREVIEW_WIDTH     80
-#define CAMERA_PREVIEW_HEIGHT    48
-#define CAMERA_PREVIEW_CHANNELS  3
+#define CAMERA_PREVIEW_WIDTH 80
+#define CAMERA_PREVIEW_HEIGHT 48
+#define CAMERA_PREVIEW_CHANNELS 3
 #define CAMERA_PREVIEW_JPEG_QUALITY 35
-#define CAMERA_PREVIEW_FPS       4
+#define CAMERA_PREVIEW_FPS 4
 #define CAMERA_PREVIEW_INTERVAL_MS (1000 / CAMERA_PREVIEW_FPS)
 #define CAMERA_PREVIEW_RGB_BYTES (CAMERA_PREVIEW_WIDTH * CAMERA_PREVIEW_HEIGHT * CAMERA_PREVIEW_CHANNELS)
 #define CAMERA_PREVIEW_JPEG_BYTES (CAMERA_PREVIEW_RGB_BYTES)
 #define CAMERA_PREVIEW_B64_BYTES (((CAMERA_PREVIEW_JPEG_BYTES + 2) / 3) * 4 + 1)
 #define CAMERA_PREVIEW_JSON_BYTES (CAMERA_PREVIEW_B64_BYTES + 320)
-#define SD_CARD_MOUNT_POINT      "/sdcard"
-#define SD_LDO_CHAN_ID           4
-#define SD_LDO_VOLTAGE_MV        3300
+#define SD_CARD_MOUNT_POINT "/sdcard"
+#define SD_LDO_CHAN_ID 4
+#define SD_LDO_VOLTAGE_MV 3300
 #define WORKAROUND_HOSTED_DOES_SDMMC_HOST_INIT 1
 
 static uint8_t s_preview_rgb[CAMERA_PREVIEW_RGB_BYTES];
@@ -79,91 +67,28 @@ static void publish_json(const char *topic, char *json)
 static void publish_status(void)
 {
     labguard_status_t status = {
-        .node = LABGUARD_NODE_INDOOR,
+        .node = LABGUARD_NODE_DEVICE,
         .online = true,
         .uptime_s = now_seconds(),
         .wifi_rssi = labguard_net_get_rssi(),
         .version = LABGUARD_VERSION,
         .timestamp = now_seconds(),
     };
-    publish_json(LABGUARD_TOPIC_INDOOR_STATUS, labguard_status_to_json(&status));
+    publish_json(LABGUARD_TOPIC_DEVICE_STATUS, labguard_status_to_json(&status));
 }
 
 static void publish_event(labguard_risk_level_t level, const char *event, const char *actions)
 {
     labguard_event_t message = {
-        .node = LABGUARD_NODE_INDOOR,
+        .node = LABGUARD_NODE_DEVICE,
         .level = level,
-        .source = "risk_engine",
+        .source = "device",
         .event = event,
         .actions = actions,
         .timestamp = now_seconds(),
     };
     event_log_append_event(&message);
     publish_json(LABGUARD_TOPIC_EVENT, labguard_event_to_json(&message));
-}
-
-static void set_all_profiles(labguard_profile_t profile)
-{
-    sensor_reader_set_profile(profile);
-    hazard_infer_set_profile(profile);
-}
-
-static int command_level_or_default(const labguard_command_t *command, int default_level)
-{
-    if (command == NULL || command->level_pct < 0) {
-        return default_level;
-    }
-    if (command->level_pct > 100) {
-        return 100;
-    }
-    return command->level_pct;
-}
-
-static void clear_manual_overrides(void)
-{
-    s_manual_fan_on = false;
-    s_manual_pump_on = false;
-    s_manual_alarm_on = false;
-    s_manual_fan_level_pct = 100;
-    s_manual_pump_level_pct = 100;
-}
-
-static audio_prompt_t prompt_for_risk(const labguard_risk_state_t *risk)
-{
-    if (risk == NULL) {
-        return AUDIO_PROMPT_TOXIC_GAS;
-    }
-    if (risk->risk_level >= LABGUARD_RISK_EMERGENCY || risk->flame) {
-        return AUDIO_PROMPT_FIRE;
-    }
-    if (risk->risk_level >= LABGUARD_RISK_ALARM) {
-        return AUDIO_PROMPT_TOXIC_GAS;
-    }
-    return AUDIO_PROMPT_MANUAL_ALARM;
-}
-
-static void play_alarm_prompt_if_needed(labguard_risk_level_t previous_level,
-                                        const labguard_risk_state_t *risk,
-                                        bool manual_alarm_on)
-{
-    if (risk == NULL) {
-        return;
-    }
-
-    if (manual_alarm_on && previous_level < LABGUARD_RISK_ALARM) {
-        audio_prompt_play(AUDIO_PROMPT_MANUAL_ALARM);
-        return;
-    }
-
-    if (risk->risk_level >= LABGUARD_RISK_ALARM && previous_level < LABGUARD_RISK_ALARM) {
-        audio_prompt_play(prompt_for_risk(risk));
-        return;
-    }
-
-    if (risk->risk_level >= LABGUARD_RISK_EMERGENCY && previous_level < LABGUARD_RISK_EMERGENCY) {
-        audio_prompt_play(AUDIO_PROMPT_FIRE);
-    }
 }
 
 static uint8_t expand_rgb565_component(uint16_t value, int bits)
@@ -357,115 +282,39 @@ static void init_sd_card(void)
 
 static void apply_command(const labguard_command_t *command)
 {
-    if (command == NULL || !labguard_command_targets_node(command, LABGUARD_NODE_INDOOR)) {
+    if (command == NULL || !labguard_command_targets_node(command, LABGUARD_NODE_DEVICE)) {
         return;
     }
 
     switch (command->type) {
     case LABGUARD_CMD_RESET:
-        set_all_profiles(LABGUARD_PROFILE_AUTO);
-        portENTER_CRITICAL(&s_state_lock);
-        s_force_safe_mode = false;
-        clear_manual_overrides();
-        portEXIT_CRITICAL(&s_state_lock);
         actuator_ctrl_set_fan(false);
         actuator_ctrl_set_pump(false);
-        publish_event(LABGUARD_RISK_NORMAL, "indoor_reset", "clear_forced_mode");
-        break;
-    case LABGUARD_CMD_SELFTEST:
-        portENTER_CRITICAL(&s_state_lock);
-        clear_manual_overrides();
-        portEXIT_CRITICAL(&s_state_lock);
-        set_all_profiles(LABGUARD_PROFILE_ALARM);
-        publish_event(LABGUARD_RISK_ALARM, "indoor_selftest", "simulate_alarm_scene");
-        break;
-    case LABGUARD_CMD_ADMIN_LOCK:
-        portENTER_CRITICAL(&s_state_lock);
-        s_force_safe_mode = false;
-        portEXIT_CRITICAL(&s_state_lock);
-        publish_event(LABGUARD_RISK_WARNING, "admin_lock_notice", "outdoor_should_lock");
-        break;
-    case LABGUARD_CMD_ADMIN_UNLOCK:
-        set_all_profiles(LABGUARD_PROFILE_AUTO);
-        publish_event(LABGUARD_RISK_NORMAL, "admin_unlock_notice", "return_auto_mode");
-        break;
-    case LABGUARD_CMD_FORCE_NORMAL:
-        portENTER_CRITICAL(&s_state_lock);
-        s_force_safe_mode = true;
-        clear_manual_overrides();
-        portEXIT_CRITICAL(&s_state_lock);
-        actuator_ctrl_set_fan(false);
-        actuator_ctrl_set_pump(false);
-        set_all_profiles(LABGUARD_PROFILE_NORMAL);
-        publish_event(LABGUARD_RISK_NORMAL, "indoor_profile_normal", "force_safe_mode");
-        break;
-    case LABGUARD_CMD_FORCE_WARNING:
-        portENTER_CRITICAL(&s_state_lock);
-        s_force_safe_mode = false;
-        clear_manual_overrides();
-        portEXIT_CRITICAL(&s_state_lock);
-        set_all_profiles(LABGUARD_PROFILE_WARNING);
-        publish_event(LABGUARD_RISK_WARNING, "indoor_profile_warning", "simulate_warning_scene");
-        break;
-    case LABGUARD_CMD_FORCE_ALARM:
-        portENTER_CRITICAL(&s_state_lock);
-        s_force_safe_mode = false;
-        clear_manual_overrides();
-        portEXIT_CRITICAL(&s_state_lock);
-        set_all_profiles(LABGUARD_PROFILE_ALARM);
-        publish_event(LABGUARD_RISK_ALARM, "indoor_profile_alarm", "simulate_alarm_scene");
-        break;
-    case LABGUARD_CMD_FORCE_EMERGENCY:
-        portENTER_CRITICAL(&s_state_lock);
-        s_force_safe_mode = false;
-        clear_manual_overrides();
-        portEXIT_CRITICAL(&s_state_lock);
-        set_all_profiles(LABGUARD_PROFILE_EMERGENCY);
-        publish_event(LABGUARD_RISK_EMERGENCY, "indoor_profile_emergency", "simulate_fire_scene");
+        publish_event(LABGUARD_RISK_NORMAL, "device_reset", "fan_off_pump_off");
         break;
     case LABGUARD_CMD_FAN_ON:
-        portENTER_CRITICAL(&s_state_lock);
-        s_manual_fan_on = true;
-        s_manual_fan_level_pct = command_level_or_default(command, s_manual_fan_level_pct);
-        portEXIT_CRITICAL(&s_state_lock);
-        actuator_ctrl_set_fan_level(s_manual_fan_level_pct);
+        actuator_ctrl_set_fan_level(command->level_pct < 0 ? 100 : command->level_pct);
         actuator_ctrl_set_fan(true);
         publish_event(LABGUARD_RISK_NORMAL, "manual_fan_on", "fan_on");
         break;
     case LABGUARD_CMD_FAN_OFF:
-        portENTER_CRITICAL(&s_state_lock);
-        s_manual_fan_on = false;
-        portEXIT_CRITICAL(&s_state_lock);
         actuator_ctrl_set_fan(false);
         publish_event(LABGUARD_RISK_NORMAL, "manual_fan_off", "fan_off");
         break;
     case LABGUARD_CMD_PUMP_ON:
-        portENTER_CRITICAL(&s_state_lock);
-        s_manual_pump_on = true;
-        s_manual_pump_level_pct = command_level_or_default(command, s_manual_pump_level_pct);
-        portEXIT_CRITICAL(&s_state_lock);
-        actuator_ctrl_set_pump_level(s_manual_pump_level_pct);
+        actuator_ctrl_set_pump_level(command->level_pct < 0 ? 100 : command->level_pct);
         actuator_ctrl_set_pump(true);
         publish_event(LABGUARD_RISK_NORMAL, "manual_pump_on", "pump_on");
         break;
     case LABGUARD_CMD_PUMP_OFF:
-        portENTER_CRITICAL(&s_state_lock);
-        s_manual_pump_on = false;
-        portEXIT_CRITICAL(&s_state_lock);
         actuator_ctrl_set_pump(false);
         publish_event(LABGUARD_RISK_NORMAL, "manual_pump_off", "pump_off");
         break;
     case LABGUARD_CMD_ALARM_ON:
-        portENTER_CRITICAL(&s_state_lock);
-        s_manual_alarm_on = true;
-        portEXIT_CRITICAL(&s_state_lock);
-        audio_prompt_play(AUDIO_PROMPT_MANUAL_ALARM);
-        publish_event(LABGUARD_RISK_NORMAL, "manual_alarm_on", "voice_alarm_on");
+        audio_prompt_play(AUDIO_PROMPT_TOXIC_GAS);
+        publish_event(LABGUARD_RISK_ALARM, "manual_alarm_on", "voice_alarm_on");
         break;
     case LABGUARD_CMD_ALARM_OFF:
-        portENTER_CRITICAL(&s_state_lock);
-        s_manual_alarm_on = false;
-        portEXIT_CRITICAL(&s_state_lock);
         publish_event(LABGUARD_RISK_NORMAL, "manual_alarm_off", "voice_alarm_off");
         break;
     case LABGUARD_CMD_NONE:
@@ -497,7 +346,7 @@ static void net_message_cb(const char *topic, const char *payload, int payload_l
     }
 }
 
-static void indoor_task(void *arg)
+static void device_task(void *arg)
 {
     (void)arg;
 
@@ -509,82 +358,42 @@ static void indoor_task(void *arg)
         labguard_hazard_result_t hazard = {0};
         labguard_risk_state_t risk = {0};
         indoor_camera_frame_t frame = {0};
-        bool force_safe;
-        bool manual_fan_on;
-        bool manual_pump_on;
-        bool manual_alarm_on;
-        int manual_fan_level_pct;
-        int manual_pump_level_pct;
 
         sensor_reader_read(&sensor);
 
         esp_err_t frame_ret = indoor_camera_capture_get_latest_frame(&frame);
         if (frame_ret == ESP_OK) {
             logged_missing_frame = false;
-            hazard_infer_run(frame.data, frame.len, frame.width, frame.height, &hazard);
+            hazard.smoke = false;
+            hazard.flame = false;
+            hazard.score_smoke = 0.0f;
+            hazard.score_flame = 0.0f;
+            hazard.detection_count = 0;
+            hazard.model = "camera_link_only";
         } else {
             if (!logged_missing_frame) {
-                ESP_LOGW(TAG, "camera frame unavailable for hazard inference yet: %s", esp_err_to_name(frame_ret));
+                ESP_LOGW(TAG, "camera frame unavailable: %s", esp_err_to_name(frame_ret));
                 logged_missing_frame = true;
             }
-            hazard_infer_run(NULL, 0, 0, 0, &hazard);
+            hazard.smoke = false;
+            hazard.flame = false;
+            hazard.score_smoke = 0.0f;
+            hazard.score_flame = 0.0f;
+            hazard.detection_count = 0;
+            hazard.model = "camera_unavailable";
         }
 
         risk_fusion_evaluate(&sensor, &hazard, &risk);
-
-        portENTER_CRITICAL(&s_state_lock);
-        force_safe = s_force_safe_mode;
-        manual_fan_on = s_manual_fan_on;
-        manual_pump_on = s_manual_pump_on;
-        manual_alarm_on = s_manual_alarm_on;
-        manual_fan_level_pct = s_manual_fan_level_pct;
-        manual_pump_level_pct = s_manual_pump_level_pct;
-        portEXIT_CRITICAL(&s_state_lock);
-
-        if (force_safe) {
-            risk.risk_level = LABGUARD_RISK_NORMAL;
-            risk.risk_text = "forced_safe";
-            risk.smoke = false;
-            risk.flame = false;
-            risk.gas_alarm = false;
-            risk.action_alarm = false;
-            risk.action_fan = false;
-            risk.action_pump = false;
-            risk.fan_level_pct = 0;
-            risk.pump_level_pct = 0;
-        }
-
-        if (manual_fan_on) {
-            risk.action_fan = true;
-            risk.fan_level_pct = manual_fan_level_pct;
-        } else if (risk.action_fan && risk.fan_level_pct <= 0) {
-            risk.fan_level_pct = 100;
-        } else if (!risk.action_fan) {
-            risk.fan_level_pct = 0;
-        }
-
-        if (manual_pump_on) {
-            risk.action_pump = true;
-            risk.pump_level_pct = manual_pump_level_pct;
-        } else if (risk.action_pump && risk.pump_level_pct <= 0) {
-            risk.pump_level_pct = 100;
-        } else if (!risk.action_pump) {
-            risk.pump_level_pct = 0;
-        }
-
-        if (manual_alarm_on) {
-            risk.action_alarm = true;
-        }
-
         actuator_ctrl_apply_risk(&risk);
-        play_alarm_prompt_if_needed(last_level, &risk, manual_alarm_on);
 
-        publish_json(LABGUARD_TOPIC_INDOOR_SENSOR, labguard_sensor_data_to_json(&sensor));
-        publish_json(LABGUARD_TOPIC_INDOOR_RISK, labguard_risk_state_to_json(&risk));
+        publish_json(LABGUARD_TOPIC_DEVICE_SENSOR, labguard_sensor_data_to_json(&sensor));
+        publish_json(LABGUARD_TOPIC_DEVICE_RISK, labguard_risk_state_to_json(&risk));
 
         if (risk.risk_level != last_level) {
-            publish_event(risk.risk_level, risk.risk_text, risk.action_pump ? "alarm_fan_pump" :
-                           (risk.action_fan ? "alarm_fan" : (risk.action_alarm ? "alarm_only" : "idle")));
+            publish_event(risk.risk_level,
+                          risk.risk_text,
+                          risk.action_pump ? "alarm_fan_pump" :
+                          (risk.action_fan ? "alarm_fan" : (risk.action_alarm ? "alarm_only" : "idle")));
             last_level = risk.risk_level;
         }
 
@@ -605,12 +414,12 @@ static void camera_publish_task(void *arg)
         if (frame_ret == ESP_OK) {
             logged_missing_frame = false;
             if (build_camera_preview_json(&frame, preview_json, sizeof(preview_json))) {
-                labguard_net_publish(LABGUARD_TOPIC_INDOOR_CAMERA, preview_json, 0, false);
+                labguard_net_publish(LABGUARD_TOPIC_DEVICE_CAMERA, preview_json, 0, false);
             } else {
                 ESP_LOGW(TAG, "skip camera preview publish: preview encode failed");
             }
         } else if (!logged_missing_frame) {
-            ESP_LOGW(TAG, "camera preview unavailable for dashboard yet: %s", esp_err_to_name(frame_ret));
+            ESP_LOGW(TAG, "camera preview unavailable: %s", esp_err_to_name(frame_ret));
             logged_missing_frame = true;
         }
 
@@ -630,15 +439,7 @@ static void heartbeat_task(void *arg)
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "LabGuard indoor node starting, version=%s", LABGUARD_VERSION);
-
-    portENTER_CRITICAL(&s_state_lock);
-    s_force_safe_mode = false;
-    clear_manual_overrides();
-    portEXIT_CRITICAL(&s_state_lock);
-
-    actuator_ctrl_set_fan_level(100);
-    actuator_ctrl_set_pump_level(100);
+    ESP_LOGI(TAG, "LabGuard device starting, version=%s", LABGUARD_VERSION);
 
     event_log_init(NULL);
     init_sd_card();
@@ -655,22 +456,16 @@ void app_main(void)
     labguard_net_subscribe(LABGUARD_TOPIC_CMD_RESET, 1);
     labguard_net_subscribe(LABGUARD_TOPIC_CMD_TEST, 1);
 
-    // sensor_reader_init creates the shared I2C bus on GPIO7/8 that the
-    // SC2336 SCCB also lives on, so it must run before the camera pipeline.
     sensor_reader_init();
     indoor_camera_capture_init();
-    hazard_infer_init();
-#if CONFIG_LABGUARD_ESPDL_PROBE_RUN_ON_BOOT
-    espdl_probe_run_once();
-#endif
     risk_fusion_init();
     actuator_ctrl_init();
     audio_prompt_init();
 
     publish_status();
-    publish_event(LABGUARD_RISK_NORMAL, "indoor_boot", "camera_sensor_actuator_ready");
+    publish_event(LABGUARD_RISK_NORMAL, "device_boot", "camera_sensor_actuator_ready");
 
-    xTaskCreate(indoor_task, "indoor_task", 8192, NULL, 5, NULL);
+    xTaskCreate(device_task, "device_task", 8192, NULL, 5, NULL);
     xTaskCreate(camera_publish_task, "camera_publish", 8192, NULL, 4, NULL);
-    xTaskCreate(heartbeat_task, "indoor_heartbeat", 4096, NULL, 4, NULL);
+    xTaskCreate(heartbeat_task, "device_heartbeat", 4096, NULL, 4, NULL);
 }

@@ -129,6 +129,13 @@ static void clear_manual_overrides(void)
     s_manual_pump_level_pct = 100;
 }
 
+static void reset_manual_outputs(void)
+{
+    actuator_ctrl_set_fan(false);
+    actuator_ctrl_set_pump(false);
+    actuator_ctrl_set_alarm(false);
+}
+
 static audio_prompt_t prompt_for_risk(const labguard_risk_state_t *risk)
 {
     if (risk == NULL) {
@@ -368,8 +375,7 @@ static void apply_command(const labguard_command_t *command)
         s_force_safe_mode = false;
         clear_manual_overrides();
         portEXIT_CRITICAL(&s_state_lock);
-        actuator_ctrl_set_fan(false);
-        actuator_ctrl_set_pump(false);
+        reset_manual_outputs();
         publish_event(LABGUARD_RISK_NORMAL, "indoor_reset", "clear_forced_mode");
         break;
     case LABGUARD_CMD_SELFTEST:
@@ -394,8 +400,7 @@ static void apply_command(const labguard_command_t *command)
         s_force_safe_mode = true;
         clear_manual_overrides();
         portEXIT_CRITICAL(&s_state_lock);
-        actuator_ctrl_set_fan(false);
-        actuator_ctrl_set_pump(false);
+        reset_manual_outputs();
         set_all_profiles(LABGUARD_PROFILE_NORMAL);
         publish_event(LABGUARD_RISK_NORMAL, "indoor_profile_normal", "force_safe_mode");
         break;
@@ -459,14 +464,16 @@ static void apply_command(const labguard_command_t *command)
         portENTER_CRITICAL(&s_state_lock);
         s_manual_alarm_on = true;
         portEXIT_CRITICAL(&s_state_lock);
+        actuator_ctrl_set_alarm(true);
         audio_prompt_play(AUDIO_PROMPT_MANUAL_ALARM);
-        publish_event(LABGUARD_RISK_NORMAL, "manual_alarm_on", "voice_alarm_on");
+        publish_event(LABGUARD_RISK_NORMAL, "manual_alarm_on", "alarm_on_voice_prompt");
         break;
     case LABGUARD_CMD_ALARM_OFF:
         portENTER_CRITICAL(&s_state_lock);
         s_manual_alarm_on = false;
         portEXIT_CRITICAL(&s_state_lock);
-        publish_event(LABGUARD_RISK_NORMAL, "manual_alarm_off", "voice_alarm_off");
+        actuator_ctrl_set_alarm(false);
+        publish_event(LABGUARD_RISK_NORMAL, "manual_alarm_off", "alarm_off");
         break;
     case LABGUARD_CMD_NONE:
     default:
@@ -637,9 +644,6 @@ void app_main(void)
     clear_manual_overrides();
     portEXIT_CRITICAL(&s_state_lock);
 
-    actuator_ctrl_set_fan_level(100);
-    actuator_ctrl_set_pump_level(100);
-
     event_log_init(NULL);
     init_sd_card();
 
@@ -665,6 +669,9 @@ void app_main(void)
 #endif
     risk_fusion_init();
     actuator_ctrl_init();
+    actuator_ctrl_set_fan_level(100);
+    actuator_ctrl_set_pump_level(100);
+    actuator_ctrl_set_alarm(false);
     audio_prompt_init();
 
     publish_status();

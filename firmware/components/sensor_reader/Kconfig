@@ -1,0 +1,52 @@
+menu "LabGuard hardware sensor reader"
+
+    config LABGUARD_SENSOR_I2C_PORT
+        int "SHT3x/ENS160 I2C port"
+        range 0 2
+        default 0
+
+    config LABGUARD_SENSOR_I2C_SDA_GPIO
+        int "SHT3x/ENS160 I2C SDA GPIO"
+        range 0 54
+        default 23
+
+    config LABGUARD_SENSOR_I2C_SCL_GPIO
+        int "SHT3x/ENS160 I2C SCL GPIO"
+        range 0 54
+        default 22
+
+    config LABGUARD_SENSOR_I2C_FREQ_HZ
+        int "SHT3x/ENS160 I2C clock speed"
+        range 10000 400000
+        default 100000
+
+    config LABGUARD_SENSOR_I2C_INTERNAL_PULLUPS
+        bool "Enable ESP32-P4 internal I2C pull-ups"
+        default y
+
+    config LABGUARD_SHT3X_ADDR
+        hex "SHT3x I2C address"
+        range 0x03 0x77
+        default 0x44
+
+    config LABGUARD_ENS160_ADDR
+        hex "ENS160 I2C address"
+        range 0x03 0x77
+        default 0x53
+
+    config LABGUARD_MQ2_ENABLE
+        bool "Enable MQ-2 smoke / combustible gas sensor"
+        default y
+
+    config LABGUARD_MQ2_DO_GPIO
+        int "MQ-2 DO input GPIO"
+        depends on LABGUARD_MQ2_ENABLE
+        range 0 54
+        default 4
+
+    config LABGUARD_MQ2_INTERNAL_PULLUP
+        bool "Enable internal pull-up on MQ-2 DO line"
+        depends on LABGUARD_MQ2_ENABLE
+        default y
+
+endmenu
