@@ -1,3 +1,4 @@
 {
-    "cmake.sourceDirectory": "/home/lijiaolong/labguard/shiyanshianquan/firmware/esp_indoor"
+    "cmake.sourceDirectory": "${workspaceFolder}/firmware",
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/firmware/build/compile_commands.json"
 }
