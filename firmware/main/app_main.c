@@ -13,6 +13,7 @@
 #include "driver/sdmmc_host.h"
 #include "driver/usb_serial_jtag.h"
 #include "event_log.h"
+#include "esp_idf_version.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_vfs_fat.h"
@@ -41,6 +42,12 @@ static const char *TAG = "labguard_device";
 #define SERIAL_COMMAND_BUFFER_BYTES 512
 #define SD_CARD_MOUNT_POINT "/sdcard"
 #define SD_LDO_CHAN_ID 4
+
+#if CONFIG_IDF_TARGET_ESP32P4 && CONFIG_ESP_HOSTED_SDIO_HOST_INTERFACE && (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0))
+#define LABGUARD_HOSTED_SDMMC_HOST_INIT 1
+#else
+#define LABGUARD_HOSTED_SDMMC_HOST_INIT 0
+#endif
 
 static uint8_t s_preview_rgb[CAMERA_PREVIEW_RGB_BYTES];
 static unsigned char s_preview_b64[CAMERA_PREVIEW_B64_BYTES];
@@ -214,6 +221,19 @@ static bool build_camera_preview_json(const indoor_camera_frame_t *frame, char *
     return json_len > 0 && (size_t)json_len < json_size;
 }
 
+#if LABGUARD_HOSTED_SDMMC_HOST_INIT
+static esp_err_t sdmmc_host_init_skip(void)
+{
+    return ESP_OK;
+}
+
+static esp_err_t sdmmc_host_deinit_skip(int slot)
+{
+    (void)slot;
+    return ESP_OK;
+}
+#endif
+
 static void init_sd_card(void)
 {
     static sd_pwr_ctrl_handle_t s_sd_pwr_ctrl_handle = NULL;
@@ -234,8 +254,13 @@ static void init_sd_card(void)
         .allocation_unit_size = 64 * 1024,
     };
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    host.slot = SDMMC_HOST_SLOT_0;
     host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
     host.pwr_ctrl_handle = s_sd_pwr_ctrl_handle;
+#if LABGUARD_HOSTED_SDMMC_HOST_INIT
+    host.init = sdmmc_host_init_skip;
+    host.deinit_p = sdmmc_host_deinit_skip;
+#endif
 
     sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
     slot_config.width = 4;
@@ -493,7 +518,6 @@ void app_main(void)
     ESP_LOGI(TAG, "LabGuard device starting, version=%s", LABGUARD_VERSION);
 
     event_log_init(NULL);
-    init_sd_card();
 
     labguard_net_config_t net_config = {
         .wifi_ssid = CONFIG_LABGUARD_WIFI_SSID,
@@ -504,6 +528,7 @@ void app_main(void)
     };
     labguard_net_init(&net_config);
     labguard_net_start();
+    init_sd_card();
     labguard_net_subscribe(LABGUARD_TOPIC_CMD_RESET, 1);
     labguard_net_subscribe(LABGUARD_TOPIC_CMD_TEST, 1);
     init_serial_commands();

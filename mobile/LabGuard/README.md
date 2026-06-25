@@ -37,7 +37,7 @@ cd /home/lijiaolong/labguard/shiyanshianquan
 如果只想单独启动手机端，也可以继续使用当前脚本：
 
 ```bash
-npm start
+./run_mobile_app.sh
 ```
 
 ### Android
@@ -56,22 +56,15 @@ npm run ios
 
 ## MQTT 地址
 
-当前应用默认地址写在 [App.tsx](App.tsx) 里：
-
-```ts
-ws://172.20.10.14:9001
-```
-
-启动后会默认填入你当前电脑的局域网地址；如果电脑 IP 改了，也可以在 App 顶部输入框改成新的地址，例如：
+通过 `./run_mobile_app.sh` 或仓库根目录的 `./run_labguard_stack.sh` 启动时，脚本会把当前电脑局域网地址注入 App。默认格式是：
 
 ```text
-ws://172.20.10.14:9001
+ws://电脑IP:9001
 ```
 
-建议后续再把默认地址提取到配置文件。
+如果电脑 IP 改了，也可以在 App 顶部输入框手动改成新的地址。
 
 ## 注意
 
 - 当前首版只支持 MQTT，不支持 dashboard 的本地串口桥模式。
 - 摄像头使用 MQTT 传 Base64 图片，适合演示；高帧率场景后续应改成更适合视频流的方案。
-- `npm run web` 目前未配置完成，因为 Expo web 依赖 `react-dom` 和 `react-native-web` 尚未安装。

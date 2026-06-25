@@ -24,6 +24,7 @@ const clientId = `labguard_mobile_${Math.random().toString(16).slice(2)}`
 let client: MqttClient | null = null
 let mqttModule: MqttModule | null = null
 let lastRiskLevel = 0
+const riskKeys: RiskKey[] = ['normal', 'warning', 'alarm', 'emergency']
 
 async function loadMqtt() {
   if (!mqttModule) {
@@ -33,9 +34,21 @@ async function loadMqtt() {
   return mqttModule
 }
 
-function riskLabel(level: unknown): RiskKey {
-  const labels: RiskKey[] = ['normal', 'warning', 'alarm', 'emergency']
-  return labels[Number(level)] ?? 'normal'
+function normalizeRiskLevel(level: unknown) {
+  if (typeof level === 'string') {
+    const textLevel = level.toLowerCase()
+    const textIndex = riskKeys.indexOf(textLevel as RiskKey)
+    if (textIndex >= 0) {
+      return { level: textIndex, label: riskKeys[textIndex] }
+    }
+  }
+
+  const numericLevel = Number(level)
+  if (Number.isInteger(numericLevel) && riskKeys[numericLevel]) {
+    return { level: numericLevel, label: riskKeys[numericLevel] }
+  }
+
+  return { level: 0, label: 'normal' as RiskKey }
 }
 
 function riskDisplayText(level: unknown, text: unknown) {
@@ -44,7 +57,7 @@ function riskDisplayText(level: unknown, text: unknown) {
   if (value === 'fire_event' || value === 'flame_confirmed') return '火灾事件'
   if (value === 'warning') return '高温预警'
 
-  const numericLevel = Number(level)
+  const { level: numericLevel } = normalizeRiskLevel(level)
   if (numericLevel === 2) return '有毒气体事件'
   if (numericLevel === 3) return '火灾事件'
   if (numericLevel === 1) return '高温预警'
@@ -78,8 +91,8 @@ function publishMobileEvent(event: string, actions = '') {
   publishJson(TOPICS.event, {
     node: 'mobile',
     type: 'event',
-    risk_level: state.risk.level,
-    risk_text: state.risk.label,
+    risk_level: state.risk.label,
+    risk_text: state.risk.text,
     source: 'mobile_app',
     event,
     actions,
@@ -89,9 +102,7 @@ function publishMobileEvent(event: string, actions = '') {
 
 function updateRisk(payload: Record<string, unknown>) {
   const store = useLabguardStore.getState()
-  const numericLevel = Number(payload.risk_level)
-  const safeLevel = Number.isFinite(numericLevel) ? numericLevel : 0
-  const label = riskLabel(safeLevel)
+  const { level: safeLevel, label } = normalizeRiskLevel(payload.risk_level)
   const actions = Array.isArray(payload.actions) ? payload.actions : []
   const fanOn = boolLabel(payload.action_fan ?? actions.includes('fan_on'))
   const pumpOn = boolLabel(payload.action_pump ?? actions.includes('pump_on'))
@@ -141,12 +152,12 @@ export function handleMessage(topic: string, payload: Record<string, unknown>) {
       temperatureC: Number.isFinite(Number(payload.temperature_c)) ? Number(payload.temperature_c) : undefined,
       humidityRh: Number.isFinite(Number(payload.humidity_rh)) ? Number(payload.humidity_rh) : undefined,
       vocIndex: Number.isFinite(Number(payload.voc_index)) ? Number(payload.voc_index) : undefined,
-      mq2Alarm: Boolean(payload.mq2_alarm),
-      sensorOk: Boolean(payload.sensor_ok)
+      mq2Alarm: typeof payload.mq2_alarm === 'boolean' ? payload.mq2_alarm : undefined,
+      sensorOk: typeof payload.sensor_ok === 'boolean' ? payload.sensor_ok : undefined
     })
   }
 
-  if (payload.type === 'risk_state' || topic === TOPICS.risk) {
+  if (payload.type === 'risk' || payload.type === 'risk_state' || topic === TOPICS.risk) {
     updateRisk(payload)
   }
 
@@ -240,7 +251,7 @@ export function sendCommand(command: string, extra: Record<string, unknown> = {}
     node: 'mobile',
     type: 'command',
     command,
-    target_node: 'indoor',
+    target_node: 'device',
     ...extra,
     timestamp: timestamp()
   }

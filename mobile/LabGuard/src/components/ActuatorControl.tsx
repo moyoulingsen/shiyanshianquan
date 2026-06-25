@@ -1,4 +1,5 @@
 import { View, Text, Pressable, StyleSheet } from 'react-native'
+import Slider from '@react-native-community/slider'
 
 import type { ActuatorName, ActuatorState } from '../types'
 import { toggleActuator, updateActuatorLevel } from '../mqtt/client'
@@ -29,9 +30,17 @@ export function ActuatorControl({ name, title, state }: Props) {
           <Text style={styles.stepText}>−</Text>
         </Pressable>
         <View style={styles.levelWrap}>
-          <View style={styles.levelTrack}>
-            <View style={[styles.levelFill, { width: `${state.level}%` }]} />
-          </View>
+          <Slider
+            style={styles.slider}
+            minimumValue={0}
+            maximumValue={100}
+            step={1}
+            value={state.level}
+            minimumTrackTintColor="#17685f"
+            maximumTrackTintColor="#ccd7d3"
+            thumbTintColor="#17685f"
+            onSlidingComplete={(value) => updateActuatorLevel(name, value, state.on)}
+          />
           <Text style={styles.levelText}>{state.level}%</Text>
         </View>
         <Pressable style={styles.stepButton} onPress={() => updateActuatorLevel(name, state.level + 5, state.on)}>
@@ -95,16 +104,8 @@ const styles = StyleSheet.create({
     gap: 8,
     alignItems: 'stretch'
   },
-  levelTrack: {
-    height: 10,
-    borderRadius: 999,
-    overflow: 'hidden',
-    backgroundColor: '#ccd7d3'
-  },
-  levelFill: {
-    height: '100%',
-    borderRadius: 999,
-    backgroundColor: '#17685f'
+  slider: {
+    height: 36
   },
   levelText: {
     textAlign: 'center',
@@ -129,4 +130,3 @@ const styles = StyleSheet.create({
     fontWeight: '600'
   }
 })
-

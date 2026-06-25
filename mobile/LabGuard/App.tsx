@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect } from 'react'
 import {
   Alert,
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View
@@ -14,17 +13,22 @@ import { StatusBar } from 'expo-status-bar'
 
 import { ActuatorControl } from './src/components/ActuatorControl'
 import { CameraPanel } from './src/components/CameraPanel'
-import { CommandButton } from './src/components/CommandButton'
 import { ConnectionPanel } from './src/components/ConnectionPanel'
 import { InfoPanel } from './src/components/InfoPanel'
 import { LogList } from './src/components/LogList'
 import { RiskCard } from './src/components/RiskCard'
 import { SensorCard } from './src/components/SensorCard'
-import { connectMqtt, disconnectMqtt, sendCommand, toggleAlarm } from './src/mqtt/client'
+import { connectMqtt, disconnectMqtt, toggleAlarm } from './src/mqtt/client'
 import { useLabguardStore } from './src/state/labguardStore'
 import { formatNumber, formatUptime } from './src/utils/format'
 
-const DEFAULT_BROKER_URL = 'ws://172.20.10.14:9001'
+declare const process: {
+  env?: {
+    EXPO_PUBLIC_LABGUARD_MQTT_WS_URL?: string
+  }
+}
+
+const DEFAULT_BROKER_URL = process.env?.EXPO_PUBLIC_LABGUARD_MQTT_WS_URL || 'ws://localhost:9001'
 
 function riskDisplayText(text: string, label: string) {
   if (text === 'toxic_gas_event' || text === 'smoke_and_gas_alarm') return '有毒气体事件'
@@ -37,8 +41,6 @@ function riskDisplayText(text: string, label: string) {
 }
 
 export default function App() {
-  const [showBusinessUi, setShowBusinessUi] = useState(true)
-
   const brokerUrl = useLabguardStore((state) => state.brokerUrl)
   const setBrokerUrl = useLabguardStore((state) => state.setBrokerUrl)
   const connectionState = useLabguardStore((state) => state.connectionState)
@@ -92,6 +94,29 @@ export default function App() {
     }
   }, [])
 
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const store = useLabguardStore.getState()
+      const now = Date.now()
+
+      if (store.lastUpdateAt && now - store.lastUpdateAt > 5000) {
+        store.setStaleState('数据过期')
+      } else if (store.lastUpdateAt) {
+        store.setStaleState('实时')
+      }
+
+      if (!store.camera?.receivedAt) {
+        store.setCameraState('等待画面', true)
+      } else if (now - store.camera.receivedAt > 5000) {
+        store.setCameraState('画面过期', true)
+      } else if (store.cameraStale || store.cameraStateText !== '实时画面') {
+        store.setCameraState('实时画面', false)
+      }
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [])
+
   const actuatorRows = [
     { label: '风扇', value: `${fan.on ? '开启' : '关闭'} / ${fan.level}%` },
     { label: '水泵', value: `${pump.on ? '开启' : '关闭'} / ${pump.level}%` },
@@ -99,7 +124,7 @@ export default function App() {
     { label: '发送状态', value: commandStateText }
   ]
 
-    return (
+  return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -123,73 +148,52 @@ export default function App() {
             onChangeText={setBrokerUrl}
             placeholder={DEFAULT_BROKER_URL}
           />
-          <Text style={styles.helperText}>默认 broker 使用当前电脑局域网地址 {DEFAULT_BROKER_URL}；点击右上角“连接”后再收发 MQTT。</Text>
+          <Text style={styles.helperText}>默认 broker 地址由启动脚本注入；点击右上角“连接”后再收发 MQTT。</Text>
         </View>
 
-        <View style={styles.switchRow}>
-          <View style={styles.switchTextWrap}>
-            <Text style={styles.switchTitle}>显示业务 UI</Text>
-            <Text style={styles.switchDesc}>关闭后只保留基础外壳；打开后显示当前硬件状态与联动控制。</Text>
-          </View>
-          <Switch value={showBusinessUi} onValueChange={setShowBusinessUi} />
+        <ConnectionPanel state={connectionState} text={connectionText} lastUpdate={lastUpdateText} />
+
+        <RiskCard label={risk.label} title={`风险 ${risk.level}`} text={riskDisplayText(risk.text, risk.label)} />
+
+        <View style={styles.metricGrid}>
+          <SensorCard title="温度" value={formatNumber(sensor.temperatureC)} unit="°C" />
+          <SensorCard title="湿度" value={formatNumber(sensor.humidityRh)} unit="%RH" />
+          <SensorCard title="VOC" value={formatNumber(sensor.vocIndex, 0)} unit="index" />
+          <SensorCard title="MQ-2" value={sensor.mq2Alarm === undefined ? '--' : sensor.mq2Alarm ? '报警' : '正常'} danger={sensor.mq2Alarm} />
         </View>
 
-        {!showBusinessUi ? (
-          <View style={styles.placeholderCard}>
-            <Text style={styles.placeholderTitle}>基础项目版外壳正常</Text>
-            <Text style={styles.placeholderText}>如果这一层稳定，下一步再继续接入执行器控制与更完整的业务交互。</Text>
-          </View>
-        ) : null}
+        <CameraPanel frame={camera} stateText={cameraStateText} stale={cameraStale} />
 
-        {showBusinessUi ? (
-          <>
-            <ConnectionPanel state={connectionState} text={connectionText} lastUpdate={lastUpdateText} />
+        <View style={styles.panelColumn}>
+          <InfoPanel title="执行器" rows={actuatorRows} badgeText="硬件联动中" />
 
-            <RiskCard label={risk.label} title={`风险 ${risk.level}`} text={riskDisplayText(risk.text, risk.label)} />
-
-            <View style={styles.metricGrid}>
-              <SensorCard title="温度" value={formatNumber(sensor.temperatureC)} unit="°C" />
-              <SensorCard title="湿度" value={formatNumber(sensor.humidityRh)} unit="%RH" />
-              <SensorCard title="VOC" value={formatNumber(sensor.vocIndex, 0)} unit="index" />
-              <SensorCard title="MQ-2" value={sensor.mq2Alarm === undefined ? '--' : sensor.mq2Alarm ? '报警' : '正常'} danger={sensor.mq2Alarm} />
-            </View>
-
-            <CameraPanel frame={camera} stateText={cameraStateText} stale={cameraStale} />
-
-            <View style={styles.panelColumn}>
-              <InfoPanel title="执行器" rows={actuatorRows} badgeText="硬件联动中" />
-
-              <View style={styles.panel}>
-                <View style={styles.panelHeader}>
-                  <View style={styles.panelHeaderText}>
-                    <Text style={styles.panelTitle}>执行器控制</Text>
-                    <Text style={styles.panelDesc}>通过按钮与滑杆调节风扇和水泵输出。</Text>
-                  </View>
-                  <View style={[styles.alarmBadge, alarmOn ? styles.alarmBadgeOn : styles.alarmBadgeOff]}>
-                    <Text style={styles.alarmBadgeText}>{alarmOn ? '报警开启' : '报警关闭'}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.controlColumn}>
-                  <ActuatorControl name="fan" title="风扇" state={fan} />
-                  <ActuatorControl name="pump" title="水泵" state={pump} />
-                </View>
-
-                <Pressable style={[styles.alarmToggleButton, alarmOn ? styles.alarmToggleButtonOn : styles.alarmToggleButtonOff]} onPress={toggleAlarm}>
-                  <Text style={styles.alarmToggleButtonText}>{alarmOn ? '关闭报警' : '开启报警'}</Text>
-                </Pressable>
+          <View style={styles.panel}>
+            <View style={styles.panelHeader}>
+              <View style={styles.panelHeaderText}>
+                <Text style={styles.panelTitle}>执行器控制</Text>
+                <Text style={styles.panelDesc}>通过按钮与滑杆调节风扇和水泵输出。</Text>
               </View>
-
-
-
-              <InfoPanel title="节点状态" rows={nodeRows} />
+              <View style={[styles.alarmBadge, alarmOn ? styles.alarmBadgeOn : styles.alarmBadgeOff]}>
+                <Text style={styles.alarmBadgeText}>{alarmOn ? '报警开启' : '报警关闭'}</Text>
+              </View>
             </View>
 
-            <View style={styles.logsWrap}>
-              <LogList logs={logs} onClear={clearLogs} />
+            <View style={styles.controlColumn}>
+              <ActuatorControl name="fan" title="风扇" state={fan} />
+              <ActuatorControl name="pump" title="水泵" state={pump} />
             </View>
-          </>
-        ) : null}
+
+            <Pressable style={[styles.alarmToggleButton, alarmOn ? styles.alarmToggleButtonOn : styles.alarmToggleButtonOff]} onPress={toggleAlarm}>
+              <Text style={styles.alarmToggleButtonText}>{alarmOn ? '关闭报警' : '开启报警'}</Text>
+            </Pressable>
+          </View>
+
+          <InfoPanel title="节点状态" rows={nodeRows} />
+        </View>
+
+        <View style={styles.logsWrap}>
+          <LogList logs={logs} onClear={clearLogs} />
+        </View>
       </ScrollView>
     </SafeAreaView>
   )
@@ -269,49 +273,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18
   },
-  switchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    borderWidth: 1,
-    borderColor: '#d4dfdc',
-    borderRadius: 14,
-    backgroundColor: '#ffffff',
-    padding: 14
-  },
-  switchTextWrap: {
-    flex: 1,
-    gap: 4
-  },
-  switchTitle: {
-    color: '#162522',
-    fontSize: 15,
-    fontWeight: '700'
-  },
-  switchDesc: {
-    color: '#64736f',
-    fontSize: 12,
-    lineHeight: 18
-  },
-  placeholderCard: {
-    borderWidth: 1,
-    borderColor: '#d4dfdc',
-    borderRadius: 14,
-    backgroundColor: '#ffffff',
-    padding: 18,
-    gap: 8
-  },
-  placeholderTitle: {
-    color: '#162522',
-    fontSize: 18,
-    fontWeight: '800'
-  },
-  placeholderText: {
-    color: '#4b5d58',
-    fontSize: 14,
-    lineHeight: 21
-  },
   metricGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -385,13 +346,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800'
   },
-  commandGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10
-  },
   logsWrap: {
     minHeight: 320
   }
 })
-

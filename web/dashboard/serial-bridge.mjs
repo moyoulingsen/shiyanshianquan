@@ -8,6 +8,8 @@ const wsPort = Number(process.env.LABGUARD_WS_PORT || 8787)
 
 const publishRe = /local publish topic=([^ ]+).*payload=(\{.*\})/
 const clients = new Set()
+let serialOpen = false
+let serialStatusMessage = `waiting for ${portPath}`
 
 function broadcast(frame) {
   const data = JSON.stringify(frame)
@@ -21,7 +23,12 @@ function broadcast(frame) {
 const wss = new WebSocketServer({ port: wsPort })
 wss.on('connection', (socket) => {
   clients.add(socket)
-  socket.send(JSON.stringify({ type: 'bridge_status', message: 'serial bridge connected' }))
+  socket.send(JSON.stringify({
+    type: 'bridge_status',
+    serial_open: serialOpen,
+    port: portPath,
+    message: serialStatusMessage
+  }))
   socket.on('close', () => clients.delete(socket))
   socket.on('message', (data) => {
     try {
@@ -45,12 +52,39 @@ const serial = new SerialPort({ path: portPath, baudRate })
 const parser = serial.pipe(new ReadlineParser({ delimiter: '\n' }))
 
 serial.on('open', () => {
+  serialOpen = true
+  serialStatusMessage = `serial open ${portPath}`
   console.log(`LabGuard serial bridge listening on ws://localhost:${wsPort}`)
   console.log(`Reading ${portPath} at ${baudRate} baud`)
+  broadcast({
+    type: 'bridge_status',
+    serial_open: true,
+    port: portPath,
+    message: serialStatusMessage
+  })
 })
 
 serial.on('error', (error) => {
+  serialOpen = false
+  serialStatusMessage = `serial error ${portPath}: ${error.message}`
   console.error(`Serial error: ${error.message}`)
+  broadcast({
+    type: 'bridge_status',
+    serial_open: false,
+    port: portPath,
+    message: serialStatusMessage
+  })
+})
+
+serial.on('close', () => {
+  serialOpen = false
+  serialStatusMessage = `serial closed ${portPath}`
+  broadcast({
+    type: 'bridge_status',
+    serial_open: false,
+    port: portPath,
+    message: serialStatusMessage
+  })
 })
 
 parser.on('data', (line) => {

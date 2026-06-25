@@ -41,7 +41,6 @@ const els = {
   clearLog: document.querySelector('#clear-log'),
   fanToggle: document.querySelector('#fan-toggle'),
   pumpToggle: document.querySelector('#pump-toggle'),
-  alarmToggle: document.querySelector('#alarm-toggle'),
   audioToggle: document.querySelector('#audio-toggle'),
   lightToggle: document.querySelector('#light-toggle'),
   fanSliderPanel: document.querySelector('#fan-slider-panel'),
@@ -57,22 +56,64 @@ const actuatorState = {
   pump: { on: false, level: 100 }
 }
 
-let alarmToggleOn = false
 let audioToggleOn = false
 let lightToggleOn = false
 let socket = null
 let mqttClient = null
 let connectedSource = null
+let transportConnectedAt = 0
+let deviceLastSeenAt = 0
+let deviceSeen = false
 let cameraLastFrameAt = 0
 let cameraFramePending = false
 let cameraQueuedPayload = null
+const riskLevels = ['normal', 'warning', 'alarm', 'emergency']
+const deviceFirstSeenTimeoutMs = 5000
+const deviceStaleTimeoutMs = 7000
 const defaultMqttUrl = `ws://${window.location.hostname || 'localhost'}:9001`
+const savedSource = localStorage.getItem('labguard.dashboard.source')
 const savedWsUrl = localStorage.getItem('labguard.dashboard.wsUrl')
 const savedMqttUrl = localStorage.getItem('labguard.dashboard.mqttUrl')
 
 function setConnection(state, text) {
   els.dot.className = `dot ${state}`
   els.connectionText.textContent = text
+}
+
+function transportLabel() {
+  return connectedSource === 'mqtt' ? 'MQTT broker' : '串口桥'
+}
+
+function dataLabel() {
+  return connectedSource === 'mqtt' ? 'MQTT 数据' : '串口数据'
+}
+
+function resetDevicePresence() {
+  transportConnectedAt = 0
+  deviceLastSeenAt = 0
+  deviceSeen = false
+}
+
+function markTransportConnected(text) {
+  transportConnectedAt = Date.now()
+  deviceLastSeenAt = 0
+  deviceSeen = false
+  setConnection('pending', text)
+}
+
+function isDeviceMessage(topic, payload) {
+  if (topic?.startsWith('labguard/device/')) return true
+  if (topic === 'labguard/event') {
+    return payload?.node === 'device' || payload?.source === 'device'
+  }
+
+  return ['sensor', 'risk', 'risk_state', 'status', 'camera_frame', 'event'].includes(payload?.type)
+}
+
+function markDeviceSeen() {
+  deviceLastSeenAt = Date.now()
+  deviceSeen = true
+  setConnection('ok', `设备在线（${dataLabel()}）`)
 }
 
 function formatNumber(value, digits = 1) {
@@ -90,27 +131,32 @@ function formatUptime(seconds) {
   return `${s}s`
 }
 
-function riskLabel(level) {
-  const labels = ['normal', 'warning', 'alarm', 'emergency']
-  return labels[Number(level)] ?? '--'
+function normalizeRiskLevel(level) {
+  if (typeof level === 'string') {
+    const textLevel = level.toLowerCase()
+    const textIndex = riskLevels.indexOf(textLevel)
+    if (textIndex >= 0) {
+      return { index: textIndex, label: riskLevels[textIndex] }
+    }
+  }
+
+  const numericIndex = Number(level)
+  if (Number.isInteger(numericIndex) && riskLevels[numericIndex]) {
+    return { index: numericIndex, label: riskLevels[numericIndex] }
+  }
+
+  return { index: 0, label: 'normal' }
 }
 
 function riskDisplayText(level, riskText) {
   const labels = ['正常', '高温预警', '有毒气体事件', '火灾事件']
   if (riskText === 'toxic_gas_event' || riskText === 'smoke_and_gas_alarm') return '有毒气体事件'
   if (riskText === 'fire_event' || riskText === 'flame_confirmed') return '火灾事件'
-  return labels[Number(level)] ?? riskText ?? '--'
+  return labels[normalizeRiskLevel(level).index] ?? riskText ?? '--'
 }
 
 function boolLabel(value) {
   return value ? '开启' : '关闭'
-}
-
-function updateAlarmToggle() {
-  if (!els.alarmToggle) return
-  els.alarmToggle.textContent = `喇叭：${alarmToggleOn ? '开启' : '关闭'}`
-  els.alarmToggle.classList.toggle('is-on', alarmToggleOn)
-  els.alarmToggle.classList.toggle('is-off', !alarmToggleOn)
 }
 
 function updateDemoToggle(button, label, isOn) {
@@ -118,11 +164,6 @@ function updateDemoToggle(button, label, isOn) {
   button.textContent = `${label}：${isOn ? '开启' : '关闭'}`
   button.classList.toggle('is-on', isOn)
   button.classList.toggle('is-off', !isOn)
-}
-
-function setAlarmToggleState(isOn) {
-  alarmToggleOn = Boolean(isOn)
-  updateAlarmToggle()
 }
 
 function setAudioToggleState(isOn) {
@@ -209,7 +250,19 @@ function updateCamera(payload) {
 function addLog(topic, payload) {
   const item = document.createElement('li')
   const time = new Date().toLocaleTimeString()
-  item.innerHTML = `<time>${time}</time><span>${topic}</span><code>${JSON.stringify(payload)}</code>`
+  const timeEl = document.createElement('time')
+  const topicEl = document.createElement('span')
+  const payloadEl = document.createElement('code')
+
+  timeEl.textContent = time
+  topicEl.textContent = topic
+  try {
+    payloadEl.textContent = typeof payload === 'string' ? payload : JSON.stringify(payload)
+  } catch {
+    payloadEl.textContent = String(payload)
+  }
+
+  item.append(timeEl, topicEl, payloadEl)
   els.log.prepend(item)
   while (els.log.children.length > 80) {
     els.log.lastElementChild?.remove()
@@ -217,6 +270,9 @@ function addLog(topic, payload) {
 }
 
 function handleMessage(topic, payload) {
+  if (isDeviceMessage(topic, payload)) {
+    markDeviceSeen()
+  }
   updateLastSeen()
   addLog(topic, payload)
 
@@ -230,8 +286,8 @@ function handleMessage(topic, payload) {
     els.sensorOk.className = payload.sensor_ok ? 'badge ok' : 'badge warn'
   }
 
-  if (payload.type === 'risk_state' || topic === 'labguard/device/risk') {
-    const label = riskLabel(payload.risk_level)
+  if (payload.type === 'risk' || payload.type === 'risk_state' || topic === 'labguard/device/risk') {
+    const { label } = normalizeRiskLevel(payload.risk_level)
     els.riskBadge.textContent = riskDisplayText(payload.risk_level, payload.risk_text)
     els.riskBadge.className = `badge risk-${label}`
     els.riskText.textContent = riskDisplayText(payload.risk_level, payload.risk_text)
@@ -245,7 +301,6 @@ function handleMessage(topic, payload) {
     els.alarm.textContent = boolLabel(alarmOn)
     setActuatorState('fan', fanOn, fanLevel)
     setActuatorState('pump', pumpOn, pumpLevel)
-    setAlarmToggleState(alarmOn)
   }
 
   if (payload.type === 'status' || topic === 'labguard/device/status') {
@@ -282,6 +337,7 @@ function disconnect() {
     mqttClient = null
   }
   connectedSource = null
+  resetDevicePresence()
 }
 
 function syncSourceFields() {
@@ -298,7 +354,7 @@ function connectSerialBridge() {
   setConnection('pending', '连接本地串口桥...')
   socket = new WebSocket(els.wsUrl.value.trim())
 
-  socket.addEventListener('open', () => setConnection('ok', '本地串口桥已连接'))
+  socket.addEventListener('open', () => markTransportConnected('串口桥已连接，等待串口状态...'))
   socket.addEventListener('close', () => {
     if (connectedSource === 'ws') setConnection('warn', '本地串口桥已断开')
   })
@@ -308,6 +364,15 @@ function connectSerialBridge() {
     try {
       frame = JSON.parse(event.data)
     } catch {
+      return
+    }
+    if (frame.type === 'bridge_status') {
+      if (connectedSource !== 'ws') return
+      if (frame.serial_open) {
+        markTransportConnected(`串口已打开 ${frame.port ?? ''}，等待设备数据...`)
+      } else {
+        setConnection('warn', frame.message ?? `串口未打开 ${frame.port ?? ''}`)
+      }
       return
     }
     if (frame.topic && frame.payload) {
@@ -334,7 +399,7 @@ function connectMqtt() {
   })
 
   mqttClient.on('connect', () => {
-    setConnection('ok', 'MQTT 已连接')
+    markTransportConnected('MQTT broker 已连接，等待设备数据...')
     topics.forEach((topic) => mqttClient.subscribe(topic, { qos: 1 }))
   })
   mqttClient.on('reconnect', () => setConnection('pending', 'MQTT 重连中...'))
@@ -356,7 +421,7 @@ function sendCommand(command, extra = {}) {
     node: 'dashboard',
     type: 'command',
     command,
-    target_node: 'indoor',
+    target_node: 'device',
     ...extra,
     timestamp: Math.floor(Date.now() / 1000)
   })
@@ -412,15 +477,6 @@ function stepActuatorLevel(actuator, delta) {
   updateActuatorLevel(actuator, current + Number(delta))
 }
 
-function toggleAlarm() {
-  const nextState = !alarmToggleOn
-  setAlarmToggleState(nextState)
-
-  if (!sendCommand(`alarm_${nextState ? 'on' : 'off'}`)) {
-    setAlarmToggleState(!nextState)
-  }
-}
-
 function toggleAudio() {
   handleCommandToggle(audioToggleOn, setAudioToggleState, 'audio')
 }
@@ -464,10 +520,6 @@ document.querySelectorAll('[data-step-actuator]').forEach((button) => {
   button.addEventListener('click', () => stepActuatorLevel(button.dataset.stepActuator, button.dataset.stepDelta))
 })
 
-els.alarmToggle?.addEventListener('click', () => {
-  toggleAlarm()
-})
-
 els.audioToggle?.addEventListener('click', () => {
   toggleAudio()
 })
@@ -477,7 +529,7 @@ els.lightToggle?.addEventListener('click', () => {
 })
 
 els.clearLog.addEventListener('click', () => {
-  els.log.innerHTML = ''
+  els.log.replaceChildren()
 })
 
 window.setInterval(() => {
@@ -490,7 +542,21 @@ window.setInterval(() => {
   }
 }, 1000)
 
-els.source.value = 'ws'
+window.setInterval(() => {
+  if (!connectedSource || !transportConnectedAt) return
+
+  const now = Date.now()
+  if (!deviceSeen && now - transportConnectedAt > deviceFirstSeenTimeoutMs) {
+    setConnection('warn', `${transportLabel()} 已连接，但还没有设备数据`)
+    return
+  }
+
+  if (deviceSeen && now - deviceLastSeenAt > deviceStaleTimeoutMs) {
+    setConnection('warn', `设备数据超时（${transportLabel()} 仍连接）`)
+  }
+}, 1000)
+
+els.source.value = savedSource === 'mqtt' || savedSource === 'ws' ? savedSource : 'ws'
 els.wsUrl.value = savedWsUrl || 'ws://localhost:8787'
 els.mqttUrl.value = savedMqttUrl || defaultMqttUrl
 syncSourceFields()
@@ -498,7 +564,6 @@ setConnection('warn', '未连接')
 updateCameraState('warn', '等待画面')
 setActuatorState('fan', false, 100)
 setActuatorState('pump', false, 100)
-setAlarmToggleState(false)
 setAudioToggleState(false)
 setLightToggleState(false)
 if (els.source.value === 'mqtt') {

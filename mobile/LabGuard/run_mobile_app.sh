@@ -93,4 +93,4 @@ if [ "$FORCE_FREE_PORTS" = "1" ]; then
 fi
 
 echo
-npm exec -- expo "${EXPO_ARGS[@]}"
+EXPO_PUBLIC_LABGUARD_MQTT_WS_URL="ws://${HOST_IP}:${MQTT_WS_PORT}" npm exec -- expo "${EXPO_ARGS[@]}"

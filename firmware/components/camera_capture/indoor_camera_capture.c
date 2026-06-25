@@ -28,9 +28,7 @@ static bool s_ready;
 static portMUX_TYPE s_frame_lock = portMUX_INITIALIZER_UNLOCKED;
 static indoor_camera_frame_t s_latest_frame;
 
-// Pin assignment matches the visible right-side ESP32-P4 HMI header pins.
 #define LCD_BACKLIGHT_GPIO       GPIO_NUM_26
-#define LCD_RESET_GPIO           GPIO_NUM_54
 #define LCD_BACKLIGHT_ON_LEVEL   1
 
 // MIPI PHY LDO channel/voltage as used by the official mipi_isp_dsi example.
@@ -93,18 +91,8 @@ static bool IRAM_ATTR on_camera_trans_finished(esp_cam_ctlr_handle_t handle,
     return false;
 }
 
-static esp_err_t init_backlight_and_reset(void)
+static esp_err_t init_backlight(void)
 {
-    const gpio_config_t rst_cfg = {
-        .pin_bit_mask = BIT64(LCD_RESET_GPIO),
-        .mode = GPIO_MODE_OUTPUT,
-    };
-    ESP_RETURN_ON_ERROR(gpio_config(&rst_cfg), TAG, "configure LCD reset GPIO failed");
-    gpio_set_level(LCD_RESET_GPIO, 0);
-    vTaskDelay(pdMS_TO_TICKS(10));
-    gpio_set_level(LCD_RESET_GPIO, 1);
-    vTaskDelay(pdMS_TO_TICKS(120));
-
     const gpio_config_t bk_cfg = {
         .pin_bit_mask = BIT64(LCD_BACKLIGHT_GPIO),
         .mode = GPIO_MODE_OUTPUT,
@@ -113,8 +101,7 @@ static esp_err_t init_backlight_and_reset(void)
     ESP_RETURN_ON_ERROR(gpio_set_level(LCD_BACKLIGHT_GPIO, LCD_BACKLIGHT_ON_LEVEL),
                         TAG, "set LCD backlight failed");
 
-    ESP_LOGI(TAG, "LCD reset/backlight done (RST=GPIO%d, BL=GPIO%d)",
-             LCD_RESET_GPIO, LCD_BACKLIGHT_GPIO);
+    ESP_LOGI(TAG, "LCD backlight enabled (BL=GPIO%d)", LCD_BACKLIGHT_GPIO);
     return ESP_OK;
 }
 
@@ -326,7 +313,7 @@ static void camera_capture_task(void *arg)
 
 esp_err_t indoor_camera_capture_init(void)
 {
-    ESP_RETURN_ON_ERROR(init_backlight_and_reset(), TAG, "backlight/reset init failed");
+    ESP_RETURN_ON_ERROR(init_backlight(), TAG, "backlight init failed");
     ESP_RETURN_ON_ERROR(init_mipi_ldo(), TAG, "MIPI PHY LDO acquire failed");
 
     esp_lcd_panel_handle_t dpi_panel = NULL;

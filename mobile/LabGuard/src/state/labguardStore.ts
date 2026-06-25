@@ -27,6 +27,7 @@ type LabguardStore = {
   camera?: CameraFrame
   cameraStateText: string
   cameraStale: boolean
+  lastUpdateAt?: number
   lastUpdateText: string
   staleStateText: string
   commandStateText: string
@@ -65,6 +66,7 @@ export const useLabguardStore = create<LabguardStore>((set) => ({
   camera: undefined,
   cameraStateText: '等待画面',
   cameraStale: true,
+  lastUpdateAt: undefined,
   lastUpdateText: '--',
   staleStateText: '--',
   commandStateText: '等待连接',
@@ -86,7 +88,7 @@ export const useLabguardStore = create<LabguardStore>((set) => ({
   setAlarmOn: (alarmOn) => set({ alarmOn }),
   setCamera: (camera) => set({ camera, cameraStateText: '实时画面', cameraStale: false }),
   setCameraState: (cameraStateText, cameraStale = false) => set({ cameraStateText, cameraStale }),
-  touchLastUpdate: (lastUpdateText) => set({ lastUpdateText, staleStateText: '实时' }),
+  touchLastUpdate: (lastUpdateText) => set({ lastUpdateText, lastUpdateAt: Date.now(), staleStateText: '实时' }),
   setStaleState: (staleStateText) => set({ staleStateText }),
   setCommandState: (commandStateText) => set({ commandStateText }),
   addLog: (entry) =>
