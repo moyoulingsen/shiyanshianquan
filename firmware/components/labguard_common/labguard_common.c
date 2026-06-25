@@ -283,8 +283,15 @@ char *labguard_risk_state_to_json(const labguard_risk_state_t *state)
     cJSON_AddBoolToObject(root, "action_alarm", state->action_alarm);
     cJSON_AddBoolToObject(root, "action_fan", state->action_fan);
     cJSON_AddBoolToObject(root, "action_pump", state->action_pump);
+    cJSON_AddBoolToObject(root, "auto_alarm", state->auto_alarm);
+    cJSON_AddBoolToObject(root, "auto_fan", state->auto_fan);
+    cJSON_AddBoolToObject(root, "auto_pump", state->auto_pump);
+    cJSON_AddBoolToObject(root, "manual_fan", state->manual_fan);
+    cJSON_AddBoolToObject(root, "manual_pump", state->manual_pump);
     cJSON_AddNumberToObject(root, "fan_level_pct", state->fan_level_pct);
     cJSON_AddNumberToObject(root, "pump_level_pct", state->pump_level_pct);
+    cJSON_AddNumberToObject(root, "manual_fan_level_pct", state->manual_fan_level_pct);
+    cJSON_AddNumberToObject(root, "manual_pump_level_pct", state->manual_pump_level_pct);
     cJSON_AddStringToObject(root, "model", state->model ? state->model : "");
     add_timestamp(root, state->timestamp);
     return print_unformatted(root);

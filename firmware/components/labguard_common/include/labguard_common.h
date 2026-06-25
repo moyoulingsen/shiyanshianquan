@@ -75,8 +75,15 @@ typedef struct {
     bool action_alarm;
     bool action_fan;
     bool action_pump;
+    bool auto_alarm;
+    bool auto_fan;
+    bool auto_pump;
+    bool manual_fan;
+    bool manual_pump;
     int fan_level_pct;
     int pump_level_pct;
+    int manual_fan_level_pct;
+    int manual_pump_level_pct;
     const char *model;
     int64_t timestamp;
 } labguard_risk_state_t;
