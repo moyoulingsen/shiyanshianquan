@@ -42,6 +42,8 @@ const els = {
   fanToggle: document.querySelector('#fan-toggle'),
   pumpToggle: document.querySelector('#pump-toggle'),
   alarmToggle: document.querySelector('#alarm-toggle'),
+  audioToggle: document.querySelector('#audio-toggle'),
+  lightToggle: document.querySelector('#light-toggle'),
   fanSliderPanel: document.querySelector('#fan-slider-panel'),
   pumpSliderPanel: document.querySelector('#pump-slider-panel'),
   fanSlider: document.querySelector('#fan-slider'),
@@ -56,6 +58,8 @@ const actuatorState = {
 }
 
 let alarmToggleOn = false
+let audioToggleOn = false
+let lightToggleOn = false
 let socket = null
 let mqttClient = null
 let connectedSource = null
@@ -109,9 +113,26 @@ function updateAlarmToggle() {
   els.alarmToggle.classList.toggle('is-off', !alarmToggleOn)
 }
 
+function updateDemoToggle(button, label, isOn) {
+  if (!button) return
+  button.textContent = `${label}：${isOn ? '开启' : '关闭'}`
+  button.classList.toggle('is-on', isOn)
+  button.classList.toggle('is-off', !isOn)
+}
+
 function setAlarmToggleState(isOn) {
   alarmToggleOn = Boolean(isOn)
   updateAlarmToggle()
+}
+
+function setAudioToggleState(isOn) {
+  audioToggleOn = Boolean(isOn)
+  updateDemoToggle(els.audioToggle, '声音', audioToggleOn)
+}
+
+function setLightToggleState(isOn) {
+  lightToggleOn = Boolean(isOn)
+  updateDemoToggle(els.lightToggle, '灯光', lightToggleOn)
 }
 
 function updateActuatorButton(actuator) {
@@ -356,6 +377,15 @@ function sendCommand(command, extra = {}) {
   return false
 }
 
+function handleCommandToggle(currentState, setState, commandName) {
+  const nextState = !currentState
+  setState(nextState)
+
+  if (!sendCommand(`${commandName}_${nextState ? 'on' : 'off'}`)) {
+    setState(!nextState)
+  }
+}
+
 function toggleActuator(actuator) {
   const nextState = !actuatorState[actuator].on
   const level = actuatorState[actuator].level
@@ -389,6 +419,14 @@ function toggleAlarm() {
   if (!sendCommand(`alarm_${nextState ? 'on' : 'off'}`)) {
     setAlarmToggleState(!nextState)
   }
+}
+
+function toggleAudio() {
+  handleCommandToggle(audioToggleOn, setAudioToggleState, 'audio')
+}
+
+function toggleLight() {
+  handleCommandToggle(lightToggleOn, setLightToggleState, 'light')
 }
 
 els.cameraPreview.addEventListener('load', flushQueuedCameraFrame)
@@ -430,6 +468,14 @@ els.alarmToggle?.addEventListener('click', () => {
   toggleAlarm()
 })
 
+els.audioToggle?.addEventListener('click', () => {
+  toggleAudio()
+})
+
+els.lightToggle?.addEventListener('click', () => {
+  toggleLight()
+})
+
 els.clearLog.addEventListener('click', () => {
   els.log.innerHTML = ''
 })
@@ -444,7 +490,7 @@ window.setInterval(() => {
   }
 }, 1000)
 
-els.source.value = 'mqtt'
+els.source.value = 'ws'
 els.wsUrl.value = savedWsUrl || 'ws://localhost:8787'
 els.mqttUrl.value = savedMqttUrl || defaultMqttUrl
 syncSourceFields()
@@ -453,4 +499,10 @@ updateCameraState('warn', '等待画面')
 setActuatorState('fan', false, 100)
 setActuatorState('pump', false, 100)
 setAlarmToggleState(false)
-connectMqtt()
+setAudioToggleState(false)
+setLightToggleState(false)
+if (els.source.value === 'mqtt') {
+  connectMqtt()
+} else {
+  connectSerialBridge()
+}

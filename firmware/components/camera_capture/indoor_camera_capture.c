@@ -22,17 +22,15 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/portmacro.h"
 #include "freertos/task.h"
-#include "sensor_reader.h"
 
 static const char *TAG = "indoor_camera";
 static bool s_ready;
 static portMUX_TYPE s_frame_lock = portMUX_INITIALIZER_UNLOCKED;
 static indoor_camera_frame_t s_latest_frame;
 
-// Pin assignment matches the ESP32-P4 HMI subboard fly-wires the indoor
-// hardware is built with (5V, GND, PWM26, RST27).
+// Pin assignment matches the visible right-side ESP32-P4 HMI header pins.
 #define LCD_BACKLIGHT_GPIO       GPIO_NUM_26
-#define LCD_RESET_GPIO           GPIO_NUM_27
+#define LCD_RESET_GPIO           GPIO_NUM_54
 #define LCD_BACKLIGHT_ON_LEVEL   1
 
 // MIPI PHY LDO channel/voltage as used by the official mipi_isp_dsi example.
@@ -54,6 +52,9 @@ static indoor_camera_frame_t s_latest_frame;
 
 #define CSI_LANE_BITRATE_MBPS    200  // line_rate = pclk * 4
 #define CSI_SCCB_FREQ_HZ         (100 * 1000)
+#define CSI_SCCB_I2C_PORT        I2C_NUM_0
+#define CSI_SCCB_SDA_GPIO        GPIO_NUM_7
+#define CSI_SCCB_SCL_GPIO        GPIO_NUM_8
 #define CAM_FORMAT_NAME          "MIPI_2lane_24Minput_RAW8_1024x600_30fps"
 
 #define FRAME_BUFFER_PIXEL_BYTES 2
@@ -61,6 +62,7 @@ static indoor_camera_frame_t s_latest_frame;
 
 static esp_cam_ctlr_handle_t s_cam_handle;
 static esp_cam_ctlr_trans_t  s_cam_trans;
+static i2c_master_bus_handle_t s_cam_i2c_bus;
 
 static bool IRAM_ATTR on_camera_get_new_vb(esp_cam_ctlr_handle_t handle,
                                            esp_cam_ctlr_trans_t *trans,
@@ -182,7 +184,32 @@ static esp_err_t init_dsi_panel(esp_lcd_panel_handle_t *out_panel, void **out_fb
     return ESP_OK;
 }
 
-static esp_err_t configure_sc2336_on_shared_bus(i2c_master_bus_handle_t bus)
+static esp_err_t init_camera_sccb_bus(void)
+{
+    if (s_cam_i2c_bus != NULL) {
+        return ESP_OK;
+    }
+
+    const i2c_master_bus_config_t bus_cfg = {
+        .i2c_port = CSI_SCCB_I2C_PORT,
+        .sda_io_num = CSI_SCCB_SDA_GPIO,
+        .scl_io_num = CSI_SCCB_SCL_GPIO,
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .glitch_ignore_cnt = 7,
+        .flags.enable_internal_pullup = true,
+    };
+    ESP_RETURN_ON_ERROR(i2c_new_master_bus(&bus_cfg, &s_cam_i2c_bus),
+                        TAG,
+                        "camera SCCB I2C bus init failed");
+    ESP_LOGI(TAG,
+             "camera SCCB bus initialized port=%d SDA=GPIO%d SCL=GPIO%d",
+             CSI_SCCB_I2C_PORT,
+             CSI_SCCB_SDA_GPIO,
+             CSI_SCCB_SCL_GPIO);
+    return ESP_OK;
+}
+
+static esp_err_t configure_sc2336_on_sccb_bus(void)
 {
     esp_cam_sensor_device_t *cam = NULL;
     esp_cam_sensor_config_t cam_cfg = {
@@ -200,7 +227,7 @@ static esp_err_t configure_sc2336_on_shared_bus(i2c_master_bus_handle_t bus)
             .device_address = p->sccb_addr,
             .dev_addr_length = I2C_ADDR_BIT_LEN_7,
         };
-        ESP_RETURN_ON_ERROR(sccb_new_i2c_io(bus, &sccb_cfg, &cam_cfg.sccb_handle),
+        ESP_RETURN_ON_ERROR(sccb_new_i2c_io(s_cam_i2c_bus, &sccb_cfg, &cam_cfg.sccb_handle),
                             TAG, "create sccb io failed");
         cam_cfg.sensor_port = p->port;
         cam = (*(p->detect))(&cam_cfg);
@@ -299,12 +326,6 @@ static void camera_capture_task(void *arg)
 
 esp_err_t indoor_camera_capture_init(void)
 {
-    i2c_master_bus_handle_t i2c_bus = sensor_reader_get_i2c_bus();
-    if (i2c_bus == NULL) {
-        ESP_LOGE(TAG, "shared I2C bus is unavailable; sensor_reader must be initialized first");
-        return ESP_ERR_INVALID_STATE;
-    }
-
     ESP_RETURN_ON_ERROR(init_backlight_and_reset(), TAG, "backlight/reset init failed");
     ESP_RETURN_ON_ERROR(init_mipi_ldo(), TAG, "MIPI PHY LDO acquire failed");
 
@@ -312,7 +333,8 @@ esp_err_t indoor_camera_capture_init(void)
     void *frame_buffer = NULL;
     ESP_RETURN_ON_ERROR(init_dsi_panel(&dpi_panel, &frame_buffer), TAG, "DSI panel init failed");
 
-    ESP_RETURN_ON_ERROR(configure_sc2336_on_shared_bus(i2c_bus), TAG, "SC2336 configuration failed");
+    ESP_RETURN_ON_ERROR(init_camera_sccb_bus(), TAG, "camera SCCB bus init failed");
+    ESP_RETURN_ON_ERROR(configure_sc2336_on_sccb_bus(), TAG, "SC2336 configuration failed");
     ESP_RETURN_ON_ERROR(init_csi_and_isp(frame_buffer), TAG, "CSI/ISP init failed");
 
     // Reset the DPI panel and pre-fill the frame buffer to white so the user

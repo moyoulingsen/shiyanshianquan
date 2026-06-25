@@ -24,7 +24,20 @@ wss.on('connection', (socket) => {
   socket.send(JSON.stringify({ type: 'bridge_status', message: 'serial bridge connected' }))
   socket.on('close', () => clients.delete(socket))
   socket.on('message', (data) => {
-    console.log(`[dashboard command] ${data}`)
+    try {
+      const frame = JSON.parse(data.toString())
+      const payload = frame?.payload ?? frame
+      const line = `${JSON.stringify(payload)}\n`
+      serial.write(line, (error) => {
+        if (error) {
+          console.error(`Serial write error: ${error.message}`)
+          return
+        }
+        console.log(`[dashboard command] ${line.trim()}`)
+      })
+    } catch (error) {
+      console.error(`Invalid dashboard command: ${error.message}`)
+    }
   })
 })
 

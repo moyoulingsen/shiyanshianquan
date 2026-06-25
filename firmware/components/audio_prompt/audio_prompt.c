@@ -1,12 +1,18 @@
 #include "audio_prompt.h"
 
+#include <ctype.h>
+#include <dirent.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "driver/i2s_std.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#include "freertos/task.h"
 #include "sdkconfig.h"
 
 static const char *TAG = "audio_prompt";
@@ -17,6 +23,10 @@ static audio_prompt_t s_last_prompt = AUDIO_PROMPT_TOXIC_GAS;
 #define AUDIO_PROMPT_FRAME_BYTES 4
 #define AUDIO_PROMPT_IO_BUFFER_BYTES 1024
 #define AUDIO_PROMPT_PATH_BYTES 160
+#define AUDIO_PROMPT_MAX_LOOP_FILES 48
+#define AUDIO_PROMPT_LOOP_TASK_STACK 8192
+#define AUDIO_PROMPT_LOOP_IDLE_MS 1500
+#define AUDIO_PROMPT_LOOP_BETWEEN_FILES_MS 80
 
 typedef struct __attribute__((packed)) {
     char riff[4];
@@ -49,6 +59,9 @@ typedef struct {
 
 static i2s_chan_handle_t s_tx_chan;
 static bool s_i2s_ready;
+static SemaphoreHandle_t s_play_mutex;
+static TaskHandle_t s_loop_task;
+static volatile bool s_loop_enabled;
 
 static bool prompt_file_path(audio_prompt_t prompt, char *path, size_t path_size)
 {
@@ -63,6 +76,78 @@ static bool prompt_file_path(audio_prompt_t prompt, char *path, size_t path_size
                        CONFIG_LABGUARD_AUDIO_PROMPT_DIR,
                        "0004.wav");
     return len > 0 && (size_t)len < path_size;
+}
+
+static bool prompt_dir_path(char *path, size_t path_size)
+{
+    if (path == NULL || path_size == 0) {
+        return false;
+    }
+    int len = snprintf(path,
+                       path_size,
+                       "%s%s",
+                       CONFIG_LABGUARD_AUDIO_PROMPT_SD_MOUNT_POINT,
+                       CONFIG_LABGUARD_AUDIO_PROMPT_DIR);
+    return len > 0 && (size_t)len < path_size;
+}
+
+static bool file_name_has_wav_extension(const char *name)
+{
+    if (name == NULL) {
+        return false;
+    }
+    size_t len = strlen(name);
+    if (len < 4) {
+        return false;
+    }
+
+    const char *ext = name + len - 4;
+    return (char)tolower((unsigned char)ext[0]) == '.' &&
+           (char)tolower((unsigned char)ext[1]) == 'w' &&
+           (char)tolower((unsigned char)ext[2]) == 'a' &&
+           (char)tolower((unsigned char)ext[3]) == 'v';
+}
+
+static int compare_file_paths(const void *a, const void *b)
+{
+    return strcmp((const char *)a, (const char *)b);
+}
+
+static int scan_audio_files(char paths[][AUDIO_PROMPT_PATH_BYTES], size_t max_files)
+{
+    if (paths == NULL || max_files == 0) {
+        return -1;
+    }
+
+    char dir_path[AUDIO_PROMPT_PATH_BYTES];
+    if (!prompt_dir_path(dir_path, sizeof(dir_path))) {
+        return -1;
+    }
+
+    DIR *dir = opendir(dir_path);
+    if (dir == NULL) {
+        return -1;
+    }
+
+    size_t count = 0;
+    struct dirent *entry = NULL;
+    while ((entry = readdir(dir)) != NULL && count < max_files) {
+        if (entry->d_name[0] == '.' || !file_name_has_wav_extension(entry->d_name)) {
+            continue;
+        }
+        int len = snprintf(paths[count],
+                           AUDIO_PROMPT_PATH_BYTES,
+                           "%s/%s",
+                           dir_path,
+                           entry->d_name);
+        if (len > 0 && len < AUDIO_PROMPT_PATH_BYTES) {
+            ++count;
+        }
+    }
+    closedir(dir);
+
+    qsort(paths, count, AUDIO_PROMPT_PATH_BYTES, compare_file_paths);
+    return (int)count;
 }
 
 static bool wav_chunk_id_equals(const char actual[4], const char expected[4])
@@ -181,7 +266,7 @@ static esp_err_t audio_prompt_init_i2s(void)
 
     i2s_std_config_t std_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(AUDIO_PROMPT_PCM_SAMPLE_RATE_HZ),
-        .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO),
         .gpio_cfg = {
             .mclk = I2S_GPIO_UNUSED,
             .bclk = CONFIG_LABGUARD_AUDIO_PROMPT_I2S_BCLK_GPIO,
@@ -210,10 +295,15 @@ static esp_err_t audio_prompt_init_i2s(void)
     }
 
     s_i2s_ready = true;
+    ESP_LOGI(TAG,
+             "audio I2S initialized format=philips DIN=GPIO%d BCLK=GPIO%d WS=GPIO%d",
+             CONFIG_LABGUARD_AUDIO_PROMPT_I2S_DOUT_GPIO,
+             CONFIG_LABGUARD_AUDIO_PROMPT_I2S_BCLK_GPIO,
+             CONFIG_LABGUARD_AUDIO_PROMPT_I2S_WS_GPIO);
     return ESP_OK;
 }
 
-static esp_err_t audio_prompt_write_pcm(FILE *file, const wav_info_t *wav)
+static esp_err_t audio_prompt_write_pcm(FILE *file, const wav_info_t *wav, bool loop_controlled)
 {
     if (file == NULL || wav == NULL || !s_i2s_ready || s_tx_chan == NULL) {
         return ESP_ERR_INVALID_ARG;
@@ -224,6 +314,10 @@ static esp_err_t audio_prompt_write_pcm(FILE *file, const wav_info_t *wav)
     uint32_t remaining = wav->data_size;
 
     while (remaining > 0) {
+        if (loop_controlled && !s_loop_enabled) {
+            return ESP_OK;
+        }
+
         size_t chunk = remaining > sizeof(read_buf) ? sizeof(read_buf) : remaining;
         size_t read_bytes = fread(read_buf, 1, chunk, file);
         if (read_bytes == 0) {
@@ -248,6 +342,10 @@ static esp_err_t audio_prompt_write_pcm(FILE *file, const wav_info_t *wav)
 
         size_t total_written = 0;
         while (total_written < write_bytes) {
+            if (loop_controlled && !s_loop_enabled) {
+                return ESP_OK;
+            }
+
             size_t bytes_written = 0;
             esp_err_t ret = i2s_channel_write(s_tx_chan,
                                               ((const uint8_t *)write_ptr) + total_written,
@@ -264,15 +362,24 @@ static esp_err_t audio_prompt_write_pcm(FILE *file, const wav_info_t *wav)
     return ESP_OK;
 }
 
-static esp_err_t audio_prompt_play_file(audio_prompt_t prompt)
+static esp_err_t audio_prompt_play_path(const char *path, bool loop_controlled)
 {
-    char path[AUDIO_PROMPT_PATH_BYTES];
-    if (!prompt_file_path(prompt, path, sizeof(path))) {
-        return ESP_ERR_INVALID_SIZE;
+    if (path == NULL || path[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!s_i2s_ready || s_tx_chan == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (s_play_mutex != NULL) {
+        xSemaphoreTake(s_play_mutex, portMAX_DELAY);
     }
 
     FILE *file = fopen(path, "rb");
     if (file == NULL) {
+        if (s_play_mutex != NULL) {
+            xSemaphoreGive(s_play_mutex);
+        }
         return ESP_ERR_NOT_FOUND;
     }
 
@@ -280,12 +387,86 @@ static esp_err_t audio_prompt_play_file(audio_prompt_t prompt)
     esp_err_t ret = wav_read_header(file, &wav);
     if (ret != ESP_OK) {
         fclose(file);
+        if (s_play_mutex != NULL) {
+            xSemaphoreGive(s_play_mutex);
+        }
         return ret;
     }
 
-    ret = audio_prompt_write_pcm(file, &wav);
+    ESP_LOGI(TAG,
+             "playing wav path=%s channels=%u rate=%lu data=%lu",
+             path,
+             (unsigned int)wav.num_channels,
+             (unsigned long)wav.sample_rate,
+             (unsigned long)wav.data_size);
+
+    ret = audio_prompt_write_pcm(file, &wav, loop_controlled);
     fclose(file);
+    if (s_play_mutex != NULL) {
+        xSemaphoreGive(s_play_mutex);
+    }
     return ret;
+}
+
+static esp_err_t audio_prompt_play_file(audio_prompt_t prompt)
+{
+    char path[AUDIO_PROMPT_PATH_BYTES];
+    if (!prompt_file_path(prompt, path, sizeof(path))) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+    return audio_prompt_play_path(path, false);
+}
+
+static void audio_prompt_loop_task(void *arg)
+{
+    (void)arg;
+
+    char (*paths)[AUDIO_PROMPT_PATH_BYTES] = calloc(AUDIO_PROMPT_MAX_LOOP_FILES, AUDIO_PROMPT_PATH_BYTES);
+    if (paths == NULL) {
+        ESP_LOGW(TAG, "audio loop file list allocation failed");
+        s_loop_enabled = false;
+        s_loop_task = NULL;
+        vTaskDelete(NULL);
+        return;
+    }
+
+    ESP_LOGI(TAG,
+             "audio loop started dir=%s%s",
+             CONFIG_LABGUARD_AUDIO_PROMPT_SD_MOUNT_POINT,
+             CONFIG_LABGUARD_AUDIO_PROMPT_DIR);
+
+    while (s_loop_enabled) {
+        int file_count = scan_audio_files(paths, AUDIO_PROMPT_MAX_LOOP_FILES);
+        if (file_count < 0) {
+            ESP_LOGW(TAG,
+                     "audio directory unavailable: %s%s",
+                     CONFIG_LABGUARD_AUDIO_PROMPT_SD_MOUNT_POINT,
+                     CONFIG_LABGUARD_AUDIO_PROMPT_DIR);
+            vTaskDelay(pdMS_TO_TICKS(AUDIO_PROMPT_LOOP_IDLE_MS));
+            continue;
+        }
+        if (file_count == 0) {
+            ESP_LOGW(TAG,
+                     "no wav files found in %s%s",
+                     CONFIG_LABGUARD_AUDIO_PROMPT_SD_MOUNT_POINT,
+                     CONFIG_LABGUARD_AUDIO_PROMPT_DIR);
+            vTaskDelay(pdMS_TO_TICKS(AUDIO_PROMPT_LOOP_IDLE_MS));
+            continue;
+        }
+
+        for (int i = 0; i < file_count && s_loop_enabled; ++i) {
+            esp_err_t ret = audio_prompt_play_path(paths[i], true);
+            if (ret != ESP_OK && s_loop_enabled) {
+                ESP_LOGW(TAG, "skip wav path=%s: %s", paths[i], esp_err_to_name(ret));
+            }
+            vTaskDelay(pdMS_TO_TICKS(AUDIO_PROMPT_LOOP_BETWEEN_FILES_MS));
+        }
+    }
+
+    free(paths);
+    ESP_LOGI(TAG, "audio loop stopped");
+    s_loop_task = NULL;
+    vTaskDelete(NULL);
 }
 
 const char *audio_prompt_to_string(audio_prompt_t prompt)
@@ -297,6 +478,16 @@ const char *audio_prompt_to_string(audio_prompt_t prompt)
 esp_err_t audio_prompt_init(void)
 {
     s_last_prompt = AUDIO_PROMPT_TOXIC_GAS;
+    s_loop_enabled = false;
+    s_loop_task = NULL;
+    if (s_play_mutex == NULL) {
+        s_play_mutex = xSemaphoreCreateMutex();
+        if (s_play_mutex == NULL) {
+            ESP_LOGW(TAG, "audio prompt mutex allocation failed");
+            return ESP_ERR_NO_MEM;
+        }
+    }
+
     esp_err_t ret = audio_prompt_init_i2s();
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "audio prompt init failed: %s", esp_err_to_name(ret));
@@ -309,6 +500,42 @@ esp_err_t audio_prompt_play(audio_prompt_t prompt)
 {
     s_last_prompt = prompt;
     return audio_prompt_play_file(prompt);
+}
+
+esp_err_t audio_prompt_start_loop(void)
+{
+    if (!s_i2s_ready || s_tx_chan == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (s_loop_task != NULL) {
+        s_loop_enabled = true;
+        return ESP_OK;
+    }
+
+    s_loop_enabled = true;
+    BaseType_t task_ret = xTaskCreate(audio_prompt_loop_task,
+                                      "audio_loop",
+                                      AUDIO_PROMPT_LOOP_TASK_STACK,
+                                      NULL,
+                                      4,
+                                      &s_loop_task);
+    if (task_ret != pdPASS) {
+        s_loop_enabled = false;
+        s_loop_task = NULL;
+        return ESP_ERR_NO_MEM;
+    }
+    return ESP_OK;
+}
+
+esp_err_t audio_prompt_stop_loop(void)
+{
+    s_loop_enabled = false;
+    return ESP_OK;
+}
+
+bool audio_prompt_is_looping(void)
+{
+    return s_loop_enabled && s_loop_task != NULL;
 }
 
 audio_prompt_t audio_prompt_get_last(void)

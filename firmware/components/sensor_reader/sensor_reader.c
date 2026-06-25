@@ -14,19 +14,19 @@
 
 static const char *TAG = "sensor_reader";
 
+#ifdef CONFIG_LABGUARD_MQ2_ACTIVE_LOW
+#define MQ2_ACTIVE_LOW 1
+#else
+#define MQ2_ACTIVE_LOW 0
+#endif
+
 #define SENSOR_I2C_TIMEOUT_MS 100
-#define SENSOR_I2C_BOOT_SCAN_TIMEOUT_MS 20
 
 #define SHT3X_ADDR_DEFAULT CONFIG_LABGUARD_SHT3X_ADDR
-#define SHT3X_ADDR_ALT 0x45
 #define SHT3X_CMD_SOFT_RESET 0x30A2
 #define SHT3X_CMD_SINGLE_HIGH_NO_CLOCK_STRETCH 0x2400
 
 #define ENS160_ADDR_DEFAULT CONFIG_LABGUARD_ENS160_ADDR
-#define ENS160_ADDR_ALT_0 0x52
-#define ENS160_ADDR_ALT_1 0x53
-#define ENS160_PART_ID 0x0160
-#define ENS160_REG_PART_ID 0x00
 #define ENS160_REG_OPMODE 0x10
 #define ENS160_REG_CONFIG 0x11
 #define ENS160_REG_TEMP_IN 0x13
@@ -46,12 +46,6 @@ typedef struct {
     bool mq2_alarm;
 } physical_sensor_sample_t;
 
-typedef struct {
-    int sda_gpio;
-    int scl_gpio;
-    const char *name;
-} sensor_i2c_pin_pair_t;
-
 static uint32_t s_cycle;
 static i2c_master_bus_handle_t s_i2c_bus;
 static i2c_master_dev_handle_t s_sht_dev;
@@ -60,10 +54,6 @@ static bool s_i2c_ready;
 static bool s_sht_ready;
 static bool s_ens_ready;
 static bool s_mq2_ready;
-static uint8_t s_sht_addr;
-static uint8_t s_ens_addr;
-static int s_i2c_sda_gpio;
-static int s_i2c_scl_gpio;
 static physical_sensor_sample_t s_last_sample;
 static bool s_last_sample_valid;
 
@@ -147,16 +137,6 @@ static uint16_t clamp_u16_from_float(float value, float min, float max)
         value = max;
     }
     return (uint16_t)(value + 0.5f);
-}
-
-static esp_err_t i2c_add_device(uint8_t addr, i2c_master_dev_handle_t *handle)
-{
-    i2c_device_config_t dev_cfg = {
-        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = addr,
-        .scl_speed_hz = CONFIG_LABGUARD_SENSOR_I2C_FREQ_HZ,
-    };
-    return i2c_master_bus_add_device(s_i2c_bus, &dev_cfg, handle);
 }
 
 static esp_err_t i2c_write_reg(i2c_master_dev_handle_t dev, uint8_t reg, const uint8_t *data, size_t len)
@@ -312,6 +292,20 @@ static void fill_default(labguard_sensor_data_t *out)
     out->timestamp = esp_timer_get_time() / 1000000;
 }
 
+static bool read_mq2_alarm(void)
+{
+#if CONFIG_LABGUARD_MQ2_ENABLE
+    if (!s_mq2_ready) {
+        return false;
+    }
+
+    int level = gpio_get_level(CONFIG_LABGUARD_MQ2_DO_GPIO);
+    return MQ2_ACTIVE_LOW ? (level == 0) : (level != 0);
+#else
+    return false;
+#endif
+}
+
 static esp_err_t read_physical_sample(physical_sensor_sample_t *sample)
 {
     bool sht_ok = false;
@@ -359,12 +353,13 @@ static esp_err_t read_physical_sample(physical_sensor_sample_t *sample)
         }
     }
 
+    sample->mq2_alarm = read_mq2_alarm();
+
     if (sht_ok || ens_ok) {
         s_last_sample = *sample;
         s_last_sample_valid = true;
     }
 
-    sample->mq2_alarm = false;
     return (sht_ok && ens_ok) ? ESP_OK : ESP_FAIL;
 }
 
@@ -378,6 +373,7 @@ esp_err_t sensor_reader_init(void)
     s_last_sample_valid = false;
     reset_filters();
 
+#ifdef CONFIG_LABGUARD_SENSOR_I2C_ENABLE
     i2c_master_bus_config_t bus_cfg = {
         .i2c_port = CONFIG_LABGUARD_SENSOR_I2C_PORT,
         .sda_io_num = CONFIG_LABGUARD_SENSOR_I2C_SDA_GPIO,
@@ -390,6 +386,11 @@ esp_err_t sensor_reader_init(void)
     s_i2c_ready = true;
     s_sht_ready = true;
     s_ens_ready = true;
+    ESP_LOGI(TAG,
+             "SHT3x/ENS160 I2C initialized port=%d SDA=GPIO%d SCL=GPIO%d",
+             CONFIG_LABGUARD_SENSOR_I2C_PORT,
+             CONFIG_LABGUARD_SENSOR_I2C_SDA_GPIO,
+             CONFIG_LABGUARD_SENSOR_I2C_SCL_GPIO);
 
     i2c_device_config_t sht_cfg = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
@@ -409,6 +410,9 @@ esp_err_t sensor_reader_init(void)
     i2c_write_u8(s_ens_dev, ENS160_REG_OPMODE, ENS160_OPMODE_STANDARD);
     i2c_write_u8(s_ens_dev, ENS160_REG_CONFIG, 0x00);
     ens160_write_temp_hum(25.0f, 50.0f);
+#else
+    ESP_LOGW(TAG, "SHT3x/ENS160 I2C disabled");
+#endif
 
 #if CONFIG_LABGUARD_MQ2_ENABLE
     gpio_config_t cfg = {
@@ -418,8 +422,12 @@ esp_err_t sensor_reader_init(void)
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_DISABLE,
     };
-    gpio_config(&cfg);
+    ESP_RETURN_ON_ERROR(gpio_config(&cfg), TAG, "MQ-2 GPIO config failed");
     s_mq2_ready = true;
+    ESP_LOGI(TAG,
+             "MQ-2 DO initialized GPIO%d active_%s",
+             CONFIG_LABGUARD_MQ2_DO_GPIO,
+             MQ2_ACTIVE_LOW ? "low" : "high");
 #endif
 
     return ESP_OK;

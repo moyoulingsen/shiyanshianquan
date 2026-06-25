@@ -11,8 +11,8 @@
 #include "audio_prompt.h"
 #include "driver/jpeg_encode.h"
 #include "driver/sdmmc_host.h"
+#include "driver/usb_serial_jtag.h"
 #include "event_log.h"
-#include "esp_ldo_regulator.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_vfs_fat.h"
@@ -21,6 +21,7 @@
 #include "labguard_net.h"
 #include "mbedtls/base64.h"
 #include "risk_fusion.h"
+#include "sd_pwr_ctrl_by_on_chip_ldo.h"
 #include "sdmmc_cmd.h"
 #include "sdkconfig.h"
 #include "sensor_reader.h"
@@ -37,10 +38,9 @@ static const char *TAG = "labguard_device";
 #define CAMERA_PREVIEW_JPEG_BYTES (CAMERA_PREVIEW_RGB_BYTES)
 #define CAMERA_PREVIEW_B64_BYTES (((CAMERA_PREVIEW_JPEG_BYTES + 2) / 3) * 4 + 1)
 #define CAMERA_PREVIEW_JSON_BYTES (CAMERA_PREVIEW_B64_BYTES + 320)
+#define SERIAL_COMMAND_BUFFER_BYTES 512
 #define SD_CARD_MOUNT_POINT "/sdcard"
 #define SD_LDO_CHAN_ID 4
-#define SD_LDO_VOLTAGE_MV 3300
-#define WORKAROUND_HOSTED_DOES_SDMMC_HOST_INIT 1
 
 static uint8_t s_preview_rgb[CAMERA_PREVIEW_RGB_BYTES];
 static unsigned char s_preview_b64[CAMERA_PREVIEW_B64_BYTES];
@@ -129,18 +129,6 @@ static bool init_camera_preview_encoder(void)
     return true;
 }
 
-#if WORKAROUND_HOSTED_DOES_SDMMC_HOST_INIT
-static esp_err_t sdmmc_host_init_dummy(void)
-{
-    return ESP_OK;
-}
-
-static esp_err_t sdmmc_host_deinit_dummy(void)
-{
-    return ESP_OK;
-}
-#endif
-
 static bool encode_camera_preview_jpeg(const indoor_camera_frame_t *frame, size_t *jpeg_size_out)
 {
     if (frame == NULL || frame->data == NULL || jpeg_size_out == NULL) {
@@ -228,14 +216,13 @@ static bool build_camera_preview_json(const indoor_camera_frame_t *frame, char *
 
 static void init_sd_card(void)
 {
-    static esp_ldo_channel_handle_t s_sd_ldo_handle = NULL;
+    static sd_pwr_ctrl_handle_t s_sd_pwr_ctrl_handle = NULL;
 
-    if (s_sd_ldo_handle == NULL) {
-        const esp_ldo_channel_config_t ldo_cfg = {
-            .chan_id = SD_LDO_CHAN_ID,
-            .voltage_mv = SD_LDO_VOLTAGE_MV,
+    if (s_sd_pwr_ctrl_handle == NULL) {
+        const sd_pwr_ctrl_ldo_config_t ldo_cfg = {
+            .ldo_chan_id = SD_LDO_CHAN_ID,
         };
-        esp_err_t ldo_ret = esp_ldo_acquire_channel(&ldo_cfg, &s_sd_ldo_handle);
+        esp_err_t ldo_ret = sd_pwr_ctrl_new_on_chip_ldo(&ldo_cfg, &s_sd_pwr_ctrl_handle);
         if (ldo_ret != ESP_OK) {
             ESP_LOGW(TAG, "microSD LDO enable failed: %s", esp_err_to_name(ldo_ret));
         }
@@ -247,26 +234,12 @@ static void init_sd_card(void)
         .allocation_unit_size = 64 * 1024,
     };
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
-    host.slot = SDMMC_HOST_SLOT_0;
     host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
-#if WORKAROUND_HOSTED_DOES_SDMMC_HOST_INIT
-    host.init = sdmmc_host_init_dummy;
-    host.deinit = sdmmc_host_deinit_dummy;
-#endif
+    host.pwr_ctrl_handle = s_sd_pwr_ctrl_handle;
 
     sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
     slot_config.width = 4;
     slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
-    slot_config.cmd = 0;
-    slot_config.clk = 0;
-    slot_config.d0 = 0;
-    slot_config.d1 = 0;
-    slot_config.d2 = 0;
-    slot_config.d3 = 0;
-    slot_config.d4 = 0;
-    slot_config.d5 = 0;
-    slot_config.d6 = 0;
-    slot_config.d7 = 0;
     sdmmc_card_t *card = NULL;
 
     ESP_LOGI(TAG, "mounting onboard microSD at %s", SD_CARD_MOUNT_POINT);
@@ -290,7 +263,9 @@ static void apply_command(const labguard_command_t *command)
     case LABGUARD_CMD_RESET:
         actuator_ctrl_set_fan(false);
         actuator_ctrl_set_pump(false);
-        publish_event(LABGUARD_RISK_NORMAL, "device_reset", "fan_off_pump_off");
+        actuator_ctrl_set_light(false);
+        audio_prompt_stop_loop();
+        publish_event(LABGUARD_RISK_NORMAL, "device_reset", "fan_off_pump_off_light_off_audio_off");
         break;
     case LABGUARD_CMD_FAN_ON:
         actuator_ctrl_set_fan_level(command->level_pct < 0 ? 100 : command->level_pct);
@@ -317,9 +292,36 @@ static void apply_command(const labguard_command_t *command)
     case LABGUARD_CMD_ALARM_OFF:
         publish_event(LABGUARD_RISK_NORMAL, "manual_alarm_off", "voice_alarm_off");
         break;
+    case LABGUARD_CMD_AUDIO_ON:
+        if (audio_prompt_start_loop() == ESP_OK) {
+            publish_event(LABGUARD_RISK_NORMAL, "manual_audio_on", "audio_loop_on");
+        } else {
+            publish_event(LABGUARD_RISK_WARNING, "manual_audio_on_failed", "audio_loop_error");
+        }
+        break;
+    case LABGUARD_CMD_AUDIO_OFF:
+        audio_prompt_stop_loop();
+        publish_event(LABGUARD_RISK_NORMAL, "manual_audio_off", "audio_loop_off");
+        break;
+    case LABGUARD_CMD_LIGHT_ON:
+        actuator_ctrl_set_light(true);
+        publish_event(LABGUARD_RISK_NORMAL, "manual_light_on", "light_on");
+        break;
+    case LABGUARD_CMD_LIGHT_OFF:
+        actuator_ctrl_set_light(false);
+        publish_event(LABGUARD_RISK_NORMAL, "manual_light_off", "light_off");
+        break;
     case LABGUARD_CMD_NONE:
     default:
         break;
+    }
+}
+
+static void handle_command_json(const char *json)
+{
+    labguard_command_t command = {0};
+    if (labguard_command_from_json(json, &command)) {
+        apply_command(&command);
     }
 }
 
@@ -339,11 +341,60 @@ static void net_message_cb(const char *topic, const char *payload, int payload_l
     buffer[copy_len] = '\0';
 
     if (strcmp(topic, LABGUARD_TOPIC_CMD_RESET) == 0 || strcmp(topic, LABGUARD_TOPIC_CMD_TEST) == 0) {
-        labguard_command_t command = {0};
-        if (labguard_command_from_json(buffer, &command)) {
-            apply_command(&command);
+        handle_command_json(buffer);
+    }
+}
+
+static void serial_command_task(void *arg)
+{
+    (void)arg;
+
+    char buffer[SERIAL_COMMAND_BUFFER_BYTES];
+    size_t len = 0;
+
+    while (true) {
+        uint8_t byte = 0;
+        int read_len = usb_serial_jtag_read_bytes(&byte, 1, pdMS_TO_TICKS(100));
+        if (read_len <= 0) {
+            continue;
+        }
+
+        if (byte == '\r' || byte == '\n') {
+            if (len > 0) {
+                buffer[len] = '\0';
+                ESP_LOGI(TAG, "serial command payload=%s", buffer);
+                handle_command_json(buffer);
+                len = 0;
+            }
+            continue;
+        }
+
+        if (len < sizeof(buffer) - 1) {
+            buffer[len++] = (char)byte;
+        } else {
+            ESP_LOGW(TAG, "serial command too long, dropping line");
+            len = 0;
         }
     }
+}
+
+static void init_serial_commands(void)
+{
+    if (usb_serial_jtag_is_driver_installed()) {
+        ESP_LOGI(TAG, "USB serial command driver already installed");
+    } else {
+        usb_serial_jtag_driver_config_t usb_cfg = USB_SERIAL_JTAG_DRIVER_CONFIG_DEFAULT();
+        usb_cfg.rx_buffer_size = 1024;
+        usb_cfg.tx_buffer_size = 1024;
+        esp_err_t ret = usb_serial_jtag_driver_install(&usb_cfg);
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "USB serial command driver init failed: %s", esp_err_to_name(ret));
+            return;
+        }
+    }
+
+    xTaskCreate(serial_command_task, "serial_cmd", 4096, NULL, 5, NULL);
+    ESP_LOGI(TAG, "serial command input ready on USB-Serial-JTAG");
 }
 
 static void device_task(void *arg)
@@ -455,12 +506,13 @@ void app_main(void)
     labguard_net_start();
     labguard_net_subscribe(LABGUARD_TOPIC_CMD_RESET, 1);
     labguard_net_subscribe(LABGUARD_TOPIC_CMD_TEST, 1);
+    init_serial_commands();
 
+    audio_prompt_init();
     sensor_reader_init();
     indoor_camera_capture_init();
     risk_fusion_init();
     actuator_ctrl_init();
-    audio_prompt_init();
 
     publish_status();
     publish_event(LABGUARD_RISK_NORMAL, "device_boot", "camera_sensor_actuator_ready");

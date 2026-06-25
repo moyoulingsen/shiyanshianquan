@@ -46,6 +46,10 @@ typedef enum {
     LABGUARD_CMD_PUMP_OFF,
     LABGUARD_CMD_ALARM_ON,
     LABGUARD_CMD_ALARM_OFF,
+    LABGUARD_CMD_AUDIO_ON,
+    LABGUARD_CMD_AUDIO_OFF,
+    LABGUARD_CMD_LIGHT_ON,
+    LABGUARD_CMD_LIGHT_OFF,
 } labguard_command_type_t;
 
 typedef struct {

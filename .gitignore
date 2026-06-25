@@ -1,27 +1,79 @@
-# Firmware / ESP-IDF build artifacts
-build/
-build-*/
-managed_components/
-sdkconfig
-sdkconfig.old
-dependencies.lock
+# LabGuard repository ignore rules
+#
+# Commit source code, docs, wiring notes, Kconfig/CMake files, package-lock.json,
+# firmware/dependencies.lock, and firmware/sdkconfig.defaults.
+# Keep generated outputs, downloaded dependencies, local credentials, and
+# machine-specific editor/cache files local.
 
-# Node / web builds
+# ESP-IDF / firmware generated files
+firmware/build/
+firmware/build-*/
+firmware/managed_components/
+firmware/sdkconfig
+firmware/sdkconfig.old
+firmware/sdkconfig.ci
+firmware/sdkconfig.ci.*
+firmware/*.elf
+firmware/*.bin
+firmware/*.map
+firmware/*.uf2
+firmware/bootloader.bin
+firmware/partition-table.bin
+firmware/flasher_args.json
+firmware/flash_args
+firmware/compile_commands.json
+
+# Keep reproducible firmware dependency versions tracked.
+!firmware/dependencies.lock
+!firmware/sdkconfig.defaults
+
+# JavaScript / TypeScript dependencies and build outputs
 node_modules/
+**/node_modules/
 dist/
+**/dist/
 web-build/
-.expo/
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# Python
+# Expo / React Native generated local state
+.expo/
+**/.expo/
+.expo-shared/
+**/.expo-shared/
+
+# Python local environments and caches
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
 .venv-*/
 venv/
+env/
 
-# Claude / local tooling
+# Local credentials and environment overrides
+.env
+.env.*
+!.env.example
+*.local
+*.local.*
+secrets/
+*.pem
+*.key
+*.crt
+
+# Local tool caches
 .claude/
+**/.claude/
+.cache/
+**/.cache/
+.pytest_cache/
+.mypy_cache/
 
 # IDE / editor
 .vscode/*
@@ -31,11 +83,16 @@ venv/
 *.swo
 *~
 
-# OS / Office
+# OS and Office temporary files
 .DS_Store
 Thumbs.db
+desktop.ini
 .~*
 ~$*
 
-# Logs
+# Logs and runtime dumps
 *.log
+logs/
+*.dmp
+*.core
+core

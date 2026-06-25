@@ -164,6 +164,14 @@ const char *labguard_command_type_to_string(labguard_command_type_t type)
         return "alarm_on";
     case LABGUARD_CMD_ALARM_OFF:
         return "alarm_off";
+    case LABGUARD_CMD_AUDIO_ON:
+        return "audio_on";
+    case LABGUARD_CMD_AUDIO_OFF:
+        return "audio_off";
+    case LABGUARD_CMD_LIGHT_ON:
+        return "light_on";
+    case LABGUARD_CMD_LIGHT_OFF:
+        return "light_off";
     case LABGUARD_CMD_NONE:
     default:
         return "none";
@@ -196,6 +204,18 @@ labguard_command_type_t labguard_command_type_from_string(const char *type)
     }
     if (strcmp(type, "alarm_off") == 0) {
         return LABGUARD_CMD_ALARM_OFF;
+    }
+    if (strcmp(type, "audio_on") == 0) {
+        return LABGUARD_CMD_AUDIO_ON;
+    }
+    if (strcmp(type, "audio_off") == 0) {
+        return LABGUARD_CMD_AUDIO_OFF;
+    }
+    if (strcmp(type, "light_on") == 0) {
+        return LABGUARD_CMD_LIGHT_ON;
+    }
+    if (strcmp(type, "light_off") == 0) {
+        return LABGUARD_CMD_LIGHT_OFF;
     }
     return LABGUARD_CMD_NONE;
 }

@@ -12,6 +12,7 @@ idf_component_register(
         camera_capture
         mbedtls
         esp_driver_jpeg
+        esp_driver_usb_serial_jtag
         fatfs
         sdmmc
 )

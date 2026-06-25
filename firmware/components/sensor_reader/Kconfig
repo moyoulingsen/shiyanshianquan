@@ -1,19 +1,23 @@
 menu "LabGuard hardware sensor reader"
 
+    config LABGUARD_SENSOR_I2C_ENABLE
+        bool "Enable SHT3x/ENS160 I2C sensors"
+        default y
+
     config LABGUARD_SENSOR_I2C_PORT
         int "SHT3x/ENS160 I2C port"
         range 0 2
-        default 0
+        default 1
 
     config LABGUARD_SENSOR_I2C_SDA_GPIO
         int "SHT3x/ENS160 I2C SDA GPIO"
         range 0 54
-        default 23
+        default 2
 
     config LABGUARD_SENSOR_I2C_SCL_GPIO
         int "SHT3x/ENS160 I2C SCL GPIO"
         range 0 54
-        default 22
+        default 3
 
     config LABGUARD_SENSOR_I2C_FREQ_HZ
         int "SHT3x/ENS160 I2C clock speed"
@@ -46,6 +50,11 @@ menu "LabGuard hardware sensor reader"
 
     config LABGUARD_MQ2_INTERNAL_PULLUP
         bool "Enable internal pull-up on MQ-2 DO line"
+        depends on LABGUARD_MQ2_ENABLE
+        default y
+
+    config LABGUARD_MQ2_ACTIVE_LOW
+        bool "MQ-2 DO alarm is active low"
         depends on LABGUARD_MQ2_ENABLE
         default y
 

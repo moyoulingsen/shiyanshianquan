@@ -16,6 +16,7 @@ FRONTEND_FEATURES.md
 现在目录里已经提供了一键启动脚本，会自动完成下面两件事：
 
 - 启动本地 MQTT broker
+- 启动本地串口桥，用于网页按钮直接控制 USB 连接的板子
 - 启动 Dashboard 网页服务
 
 运行方式：
@@ -35,6 +36,7 @@ LabGuard Dashboard 已启动
 局域网访问: http://你的电脑IP:5173
 MQTT WS:   ws://你的电脑IP:9001
 板子 MQTT: mqtt://你的电脑IP:1884
+串口桥:   ws://localhost:8787 -> /dev/ttyACM0
 ```
 
 浏览器打开：
@@ -57,6 +59,7 @@ http://172.20.10.14:5173
 
 ```text
 5173 = Dashboard 网页地址
+8787 = 本地串口桥 WebSocket 端口，声音/灯光按钮默认走这里
 9001 = 浏览器连接的 MQTT WebSocket 端口
 1884 = ESP32-P4 固件连接的 MQTT TCP 端口
 ```
@@ -69,6 +72,12 @@ WEB_PORT=5175 MQTT_WS_PORT=9002 MQTT_TCP_PORT=1885 ./run_dashboard_stack.sh
 ```
 
 如果你修改了 MQTT 端口，记得网页里填写的地址和固件里的 MQTT 地址也要同步修改。
+
+如果板子串口不是 `/dev/ttyACM0`，启动前指定：
+
+```bash
+LABGUARD_PORT=/dev/ttyACM1 ./run_dashboard_stack.sh
+```
 
 ## MQTT WebSocket 连接方式
 
@@ -140,7 +149,7 @@ ws://localhost:9001
 
 ## 串口桥调试方式
 
-如果你只是想本地调试串口桥数据流，可以继续使用旧的串口桥方式：
+一键启动脚本已经包含串口桥。只调试串口桥数据流时，也可以继续使用单独的串口桥方式：
 
 ```bash
 cd /home/lijiaolong/labguard/shiyanshianquan/web/dashboard
