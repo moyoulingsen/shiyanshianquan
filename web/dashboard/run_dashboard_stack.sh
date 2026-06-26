@@ -12,6 +12,7 @@ WEB_PORT="${WEB_PORT:-5173}"
 HOST_IP="${HOST_IP:-$(hostname -I | awk '{print $1}') }"
 HOST_IP="${HOST_IP// /}"
 FORCE_FREE_PORTS="${FORCE_FREE_PORTS:-1}"
+ENABLE_SERIAL_BRIDGE="${ENABLE_SERIAL_BRIDGE:-1}"
 
 kill_port_users() {
   local port="$1"
@@ -57,7 +58,9 @@ free_startup_ports() {
 
   kill_port_users "$MQTT_TCP_PORT"
   kill_port_users "$MQTT_WS_PORT"
-  kill_port_users "$SERIAL_WS_PORT"
+  if [ "$ENABLE_SERIAL_BRIDGE" = "1" ]; then
+    kill_port_users "$SERIAL_WS_PORT"
+  fi
   kill_port_users "$WEB_PORT"
 }
 if ! command -v npm >/dev/null 2>&1; then
@@ -110,13 +113,17 @@ if ! kill -0 "$BROKER_PID" 2>/dev/null; then
   exit 1
 fi
 
-echo "[start] 启动本地串口桥..."
-LABGUARD_PORT="$LABGUARD_PORT" LABGUARD_WS_PORT="$SERIAL_WS_PORT" npm run bridge &
-BRIDGE_PID=$!
-sleep 1
-if ! kill -0 "$BRIDGE_PID" 2>/dev/null; then
-  echo "[error] 本地串口桥启动失败，请检查 $LABGUARD_PORT 是否存在或被占用" >&2
-  exit 1
+if [ "$ENABLE_SERIAL_BRIDGE" = "1" ]; then
+  echo "[start] 启动本地串口桥..."
+  LABGUARD_PORT="$LABGUARD_PORT" LABGUARD_WS_PORT="$SERIAL_WS_PORT" npm run bridge &
+  BRIDGE_PID=$!
+  sleep 1
+  if ! kill -0 "$BRIDGE_PID" 2>/dev/null; then
+    echo "[error] 本地串口桥启动失败，请检查 $LABGUARD_PORT 是否存在或被占用" >&2
+    exit 1
+  fi
+else
+  echo "[skip] 未启动本地串口桥（ENABLE_SERIAL_BRIDGE=0），不会占用 ${LABGUARD_PORT}"
 fi
 
 echo "[start] 启动 Dashboard 页面..."
@@ -133,13 +140,21 @@ echo "========================================"
 echo "LabGuard Dashboard 已启动"
 echo "网页地址:  http://localhost:${WEB_PORT}"
 echo "局域网访问: http://${HOST_IP}:${WEB_PORT}"
-echo "串口桥:   ws://localhost:${SERIAL_WS_PORT} -> ${LABGUARD_PORT}"
+if [ "$ENABLE_SERIAL_BRIDGE" = "1" ]; then
+  echo "串口桥:   ws://localhost:${SERIAL_WS_PORT} -> ${LABGUARD_PORT}"
+else
+  echo "串口桥:   未启动（ENABLE_SERIAL_BRIDGE=0）"
+fi
 echo "MQTT WS:   ws://${HOST_IP}:${MQTT_WS_PORT}"
 echo "板子 MQTT: mqtt://${HOST_IP}:${MQTT_TCP_PORT}"
 echo "========================================"
 echo ""
-echo "网页默认使用本地串口桥，声音/灯光按钮会通过 ${LABGUARD_PORT} 发到板子。"
-echo "如果改用 MQTT WebSocket，请确认板子配置为："
+if [ "$ENABLE_SERIAL_BRIDGE" = "1" ]; then
+  echo "网页可使用本地串口桥，声音/灯光按钮可通过 ${LABGUARD_PORT} 发到板子。"
+else
+  echo "当前未启动本地串口桥，网页请使用 MQTT WebSocket。"
+fi
+echo "如果使用 MQTT WebSocket，请确认板子配置为："
 echo "  mqtt://${HOST_IP}:${MQTT_TCP_PORT}"
 echo ""
 echo "按 Ctrl+C 可同时关闭 broker、串口桥和网页服务"

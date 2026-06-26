@@ -5,6 +5,7 @@ idf_component_register(
         labguard_common
         labguard_net
         event_log
+        espdl_probe
         sensor_reader
         risk_fusion
         actuator_ctrl

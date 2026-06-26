@@ -42,11 +42,24 @@
 #define ACTUATOR_LIGHT_COLOR_R 64
 #define ACTUATOR_LIGHT_COLOR_G 64
 #define ACTUATOR_LIGHT_COLOR_B 64
+#define ACTUATOR_FAN_MIN_ACTIVE_LEVEL_PCT 60
+#define ACTUATOR_PUMP_MIN_ACTIVE_LEVEL_PCT 55
 
 static const char *TAG = "actuator_ctrl";
 static labguard_risk_state_t s_last_risk;
 static bool s_ledc_timer_configured;
 static bool s_light_on;
+static bool s_auto_alarm;
+static bool s_auto_fan;
+static bool s_auto_pump;
+static bool s_manual_fan;
+static bool s_manual_pump;
+static bool s_manual_fan_override;
+static bool s_manual_pump_override;
+static int s_auto_fan_level_pct;
+static int s_auto_pump_level_pct;
+static int s_manual_fan_level_pct;
+static int s_manual_pump_level_pct;
 static rmt_channel_handle_t s_light_rmt_chan;
 static rmt_encoder_handle_t s_light_rmt_encoder;
 static rmt_encoder_handle_t s_light_reset_encoder;
@@ -68,6 +81,15 @@ static int clamp_level_pct(int level_pct)
         return 100;
     }
     return level_pct;
+}
+
+static int clamp_active_level_pct(int level_pct, int min_active_pct)
+{
+    int clamped = clamp_level_pct(level_pct);
+    if (clamped < min_active_pct) {
+        return min_active_pct;
+    }
+    return clamped;
 }
 
 static bool should_use_pwm(int gpio_num)
@@ -168,6 +190,44 @@ static void set_pwm_level(int gpio_num, ledc_channel_t channel, int level_pct, b
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "LEDC duty update failed for GPIO%d: %s", gpio_num, esp_err_to_name(ret));
     }
+}
+
+static void apply_merged_outputs(void)
+{
+    const int auto_fan_level = s_auto_fan ? s_auto_fan_level_pct : 0;
+    const int auto_pump_level = s_auto_pump ? s_auto_pump_level_pct : 0;
+    const int manual_fan_level = s_manual_fan ? s_manual_fan_level_pct : 0;
+    const int manual_pump_level = s_manual_pump ? s_manual_pump_level_pct : 0;
+    const bool final_fan = s_manual_fan_override ? s_manual_fan : s_auto_fan;
+    const bool final_pump = s_manual_pump_override ? s_manual_pump : s_auto_pump;
+    const int final_fan_level = final_fan ? (s_manual_fan_override ? manual_fan_level : auto_fan_level) : 0;
+    const int final_pump_level = final_pump ? (s_manual_pump_override ? manual_pump_level : auto_pump_level) : 0;
+    const int output_fan_level = final_fan ? clamp_active_level_pct(final_fan_level, ACTUATOR_FAN_MIN_ACTIVE_LEVEL_PCT) : 0;
+    const int output_pump_level = final_pump ? clamp_active_level_pct(final_pump_level, ACTUATOR_PUMP_MIN_ACTIVE_LEVEL_PCT) : 0;
+
+    s_last_risk.auto_alarm = s_auto_alarm;
+    s_last_risk.auto_fan = s_auto_fan;
+    s_last_risk.auto_pump = s_auto_pump;
+    s_last_risk.manual_fan_override = s_manual_fan_override;
+    s_last_risk.manual_pump_override = s_manual_pump_override;
+    s_last_risk.manual_fan = s_manual_fan;
+    s_last_risk.manual_pump = s_manual_pump;
+    s_last_risk.manual_fan_level_pct = s_manual_fan_level_pct;
+    s_last_risk.manual_pump_level_pct = s_manual_pump_level_pct;
+    s_last_risk.action_alarm = s_auto_alarm;
+    s_last_risk.action_fan = final_fan;
+    s_last_risk.action_pump = final_pump;
+    s_last_risk.fan_level_pct = output_fan_level;
+    s_last_risk.pump_level_pct = output_pump_level;
+
+    set_pwm_level(CONFIG_LABGUARD_ACTUATOR_FAN_GPIO,
+                  ACTUATOR_LEDC_FAN_CHANNEL,
+                  output_fan_level,
+                  FAN_ACTIVE_LOW);
+    set_pwm_level(CONFIG_LABGUARD_ACTUATOR_PUMP_GPIO,
+                  ACTUATOR_LEDC_PUMP_CHANNEL,
+                  output_pump_level,
+                  PUMP_ACTIVE_LOW);
 }
 
 static esp_err_t set_gpio_output_level(int gpio_num, bool on, bool active_low)
@@ -310,6 +370,17 @@ esp_err_t actuator_ctrl_init(void)
     s_last_risk.pump_level_pct = 100;
     s_ledc_timer_configured = false;
     s_light_on = false;
+    s_auto_alarm = false;
+    s_auto_fan = false;
+    s_auto_pump = false;
+    s_manual_fan = false;
+    s_manual_pump = false;
+    s_manual_fan_override = false;
+    s_manual_pump_override = false;
+    s_auto_fan_level_pct = 0;
+    s_auto_pump_level_pct = 0;
+    s_manual_fan_level_pct = 100;
+    s_manual_pump_level_pct = 100;
     s_light_rmt_chan = NULL;
     s_light_rmt_encoder = NULL;
     s_light_reset_encoder = NULL;
@@ -342,36 +413,26 @@ esp_err_t actuator_ctrl_apply_risk(const labguard_risk_state_t *risk)
     }
 
     s_last_risk = *risk;
-    if (s_last_risk.action_fan && s_last_risk.fan_level_pct < 0) {
-        s_last_risk.fan_level_pct = 100;
-    }
-    if (!s_last_risk.action_fan) {
-        s_last_risk.fan_level_pct = 0;
-    }
-    if (s_last_risk.action_pump && s_last_risk.pump_level_pct < 0) {
-        s_last_risk.pump_level_pct = 100;
-    }
-    if (!s_last_risk.action_pump) {
-        s_last_risk.pump_level_pct = 0;
-    }
+    s_auto_alarm = risk->auto_alarm || risk->action_alarm;
+    s_auto_fan = risk->auto_fan || risk->action_fan;
+    s_auto_pump = risk->auto_pump || risk->action_pump;
+    s_auto_fan_level_pct = s_auto_fan ? clamp_level_pct(risk->fan_level_pct < 0 ? 100 : risk->fan_level_pct) : 0;
+    s_auto_pump_level_pct = s_auto_pump ? clamp_level_pct(risk->pump_level_pct < 0 ? 100 : risk->pump_level_pct) : 0;
 
-    set_pwm_level(CONFIG_LABGUARD_ACTUATOR_FAN_GPIO,
-                  ACTUATOR_LEDC_FAN_CHANNEL,
-                  risk->action_fan ? s_last_risk.fan_level_pct : 0,
-                  FAN_ACTIVE_LOW);
-    set_pwm_level(CONFIG_LABGUARD_ACTUATOR_PUMP_GPIO,
-                  ACTUATOR_LEDC_PUMP_CHANNEL,
-                  risk->action_pump ? s_last_risk.pump_level_pct : 0,
-                  PUMP_ACTIVE_LOW);
+    apply_merged_outputs();
 
     ESP_LOGI(TAG,
-             "risk=%s alarm=%d fan=%d(%d%%) pump=%d(%d%%) light=%d temp=%.1f",
+             "risk=%s alarm=%d fan=%d(%d%% auto=%d manual=%d) pump=%d(%d%% auto=%d manual=%d) light=%d temp=%.1f",
              labguard_risk_level_to_string(risk->risk_level),
-             risk->action_alarm,
-             risk->action_fan,
+             s_last_risk.action_alarm,
+             s_last_risk.action_fan,
              s_last_risk.fan_level_pct,
-             risk->action_pump,
+             s_last_risk.auto_fan,
+             s_last_risk.manual_fan,
+             s_last_risk.action_pump,
              s_last_risk.pump_level_pct,
+             s_last_risk.auto_pump,
+             s_last_risk.manual_pump,
              s_light_on,
              risk->temperature_c);
     return ESP_OK;
@@ -379,51 +440,47 @@ esp_err_t actuator_ctrl_apply_risk(const labguard_risk_state_t *risk)
 
 esp_err_t actuator_ctrl_set_fan(bool on)
 {
-    s_last_risk.action_fan = on;
-    if (on && s_last_risk.fan_level_pct <= 0) {
-        s_last_risk.fan_level_pct = 100;
+    s_manual_fan = on;
+    s_manual_fan_override = true;
+    if (on && s_manual_fan_level_pct <= 0) {
+        s_manual_fan_level_pct = 100;
     }
-    set_pwm_level(CONFIG_LABGUARD_ACTUATOR_FAN_GPIO,
-                  ACTUATOR_LEDC_FAN_CHANNEL,
-                  on ? s_last_risk.fan_level_pct : 0,
-                  FAN_ACTIVE_LOW);
+    apply_merged_outputs();
     return ESP_OK;
 }
 
 esp_err_t actuator_ctrl_set_fan_level(int level_pct)
 {
-    s_last_risk.fan_level_pct = clamp_level_pct(level_pct);
-    if (s_last_risk.action_fan) {
-        set_pwm_level(CONFIG_LABGUARD_ACTUATOR_FAN_GPIO,
-                      ACTUATOR_LEDC_FAN_CHANNEL,
-                      s_last_risk.fan_level_pct,
-                      FAN_ACTIVE_LOW);
-    }
+    s_manual_fan_level_pct = clamp_active_level_pct(level_pct, ACTUATOR_FAN_MIN_ACTIVE_LEVEL_PCT);
+    apply_merged_outputs();
     return ESP_OK;
 }
 
 esp_err_t actuator_ctrl_set_pump(bool on)
 {
-    s_last_risk.action_pump = on;
-    if (on && s_last_risk.pump_level_pct <= 0) {
-        s_last_risk.pump_level_pct = 100;
+    s_manual_pump = on;
+    s_manual_pump_override = true;
+    if (on && s_manual_pump_level_pct <= 0) {
+        s_manual_pump_level_pct = 100;
     }
-    set_pwm_level(CONFIG_LABGUARD_ACTUATOR_PUMP_GPIO,
-                  ACTUATOR_LEDC_PUMP_CHANNEL,
-                  on ? s_last_risk.pump_level_pct : 0,
-                  PUMP_ACTIVE_LOW);
+    apply_merged_outputs();
     return ESP_OK;
 }
 
 esp_err_t actuator_ctrl_set_pump_level(int level_pct)
 {
-    s_last_risk.pump_level_pct = clamp_level_pct(level_pct);
-    if (s_last_risk.action_pump) {
-        set_pwm_level(CONFIG_LABGUARD_ACTUATOR_PUMP_GPIO,
-                      ACTUATOR_LEDC_PUMP_CHANNEL,
-                      s_last_risk.pump_level_pct,
-                      PUMP_ACTIVE_LOW);
-    }
+    s_manual_pump_level_pct = clamp_active_level_pct(level_pct, ACTUATOR_PUMP_MIN_ACTIVE_LEVEL_PCT);
+    apply_merged_outputs();
+    return ESP_OK;
+}
+
+esp_err_t actuator_ctrl_clear_manual_overrides(void)
+{
+    s_manual_fan = false;
+    s_manual_pump = false;
+    s_manual_fan_override = false;
+    s_manual_pump_override = false;
+    apply_merged_outputs();
     return ESP_OK;
 }
 

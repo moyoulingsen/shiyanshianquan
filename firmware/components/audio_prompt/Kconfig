@@ -23,4 +23,9 @@ menu "LabGuard hardware audio prompt"
         range -1 54
         default 22
 
+    config LABGUARD_AUDIO_PROMPT_SD_MODE_GPIO
+        int "MAX98357A SD/MODE shutdown GPIO (-1 to disable)"
+        range -1 54
+        default -1
+
 endmenu

@@ -1,0 +1,42 @@
+menu "LabGuard indoor actuator control"
+
+    config LABGUARD_ACTUATOR_FAN_GPIO
+        int "Fan MOSFET gate (IN1) GPIO"
+        range -1 54
+        default 5
+        help
+            Drives one channel of the 4-way MOSFET module. Active-high (3.3V
+            turns the channel on, GND turns it off). Set to -1 to disable.
+
+    config LABGUARD_ACTUATOR_FAN_ACTIVE_LOW
+        bool "Fan channel is active low"
+        default n
+        help
+            Most low-side N-MOS modules with optocoupler drive the load when
+            the IN pin is high. Some opto-isolated boards expect active low.
+
+    config LABGUARD_ACTUATOR_PUMP_GPIO
+        int "Pump MOSFET gate (IN2) GPIO"
+        range -1 54
+        default 6
+        help
+            Drives a separate channel for the DC water pump. Set to -1 to
+            disable.
+
+    config LABGUARD_ACTUATOR_PUMP_ACTIVE_LOW
+        bool "Pump channel is active low"
+        default n
+
+    config LABGUARD_ACTUATOR_ALARM_GPIO
+        int "Alarm output GPIO (buzzer/LED, optional)"
+        range -1 54
+        default -1
+        help
+            Optional third channel used to flag risk_level >= ALARM. Leave at
+            -1 if unused.
+
+    config LABGUARD_ACTUATOR_ALARM_ACTIVE_LOW
+        bool "Alarm channel is active low"
+        default n
+
+endmenu

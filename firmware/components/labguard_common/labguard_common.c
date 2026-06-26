@@ -32,15 +32,6 @@ static const char *json_get_string_or_default(const cJSON *root, const char *nam
     return fallback;
 }
 
-static bool json_get_bool_or_default(const cJSON *root, const char *name, bool fallback)
-{
-    const cJSON *item = cJSON_GetObjectItemCaseSensitive(root, name);
-    if (cJSON_IsBool(item)) {
-        return cJSON_IsTrue(item);
-    }
-    return fallback;
-}
-
 static int json_get_int_or_default(const cJSON *root, const char *name, int fallback)
 {
     const cJSON *item = cJSON_GetObjectItemCaseSensitive(root, name);
@@ -55,15 +46,6 @@ static int64_t json_get_i64_or_default(const cJSON *root, const char *name, int6
     const cJSON *item = cJSON_GetObjectItemCaseSensitive(root, name);
     if (cJSON_IsNumber(item)) {
         return (int64_t)item->valuedouble;
-    }
-    return fallback;
-}
-
-static double json_get_double_or_default(const cJSON *root, const char *name, double fallback)
-{
-    const cJSON *item = cJSON_GetObjectItemCaseSensitive(root, name);
-    if (cJSON_IsNumber(item)) {
-        return item->valuedouble;
     }
     return fallback;
 }
@@ -241,6 +223,8 @@ char *labguard_status_to_json(const labguard_status_t *status)
     cJSON_AddNumberToObject(root, "uptime_s", status->uptime_s);
     cJSON_AddNumberToObject(root, "wifi_rssi", status->wifi_rssi);
     cJSON_AddStringToObject(root, "version", status->version ? status->version : "");
+    cJSON_AddBoolToObject(root, "audio_looping", status->audio_looping);
+    cJSON_AddBoolToObject(root, "light_on", status->light_on);
     add_timestamp(root, status->timestamp);
     return print_unformatted(root);
 }
@@ -286,6 +270,8 @@ char *labguard_risk_state_to_json(const labguard_risk_state_t *state)
     cJSON_AddBoolToObject(root, "auto_alarm", state->auto_alarm);
     cJSON_AddBoolToObject(root, "auto_fan", state->auto_fan);
     cJSON_AddBoolToObject(root, "auto_pump", state->auto_pump);
+    cJSON_AddBoolToObject(root, "manual_fan_override", state->manual_fan_override);
+    cJSON_AddBoolToObject(root, "manual_pump_override", state->manual_pump_override);
     cJSON_AddBoolToObject(root, "manual_fan", state->manual_fan);
     cJSON_AddBoolToObject(root, "manual_pump", state->manual_pump);
     cJSON_AddNumberToObject(root, "fan_level_pct", state->fan_level_pct);

@@ -13,6 +13,7 @@ MQTT_WS_PORT="${MQTT_WS_PORT:-9001}"
 MQTT_TCP_PORT="${MQTT_TCP_PORT:-1884}"
 SERIAL_WS_PORT="${SERIAL_WS_PORT:-8787}"
 LABGUARD_PORT="${LABGUARD_PORT:-/dev/ttyACM0}"
+ENABLE_SERIAL_BRIDGE="${ENABLE_SERIAL_BRIDGE:-1}"
 CLEAR_CACHE="${CLEAR_CACHE:-1}"
 FORCE_FREE_PORTS="${FORCE_FREE_PORTS:-1}"
 
@@ -60,7 +61,9 @@ free_startup_ports() {
 
   kill_port_users "$MQTT_TCP_PORT"
   kill_port_users "$MQTT_WS_PORT"
-  kill_port_users "$SERIAL_WS_PORT"
+  if [ "$ENABLE_SERIAL_BRIDGE" = "1" ]; then
+    kill_port_users "$SERIAL_WS_PORT"
+  fi
   kill_port_users "$WEB_PORT"
   kill_port_users "$EXPO_PORT"
 }
@@ -102,7 +105,7 @@ Dashboard: http://localhost:${WEB_PORT}
 局域网 Dashboard: http://${HOST_IP}:${WEB_PORT}
 手机 MQTT WS: ws://${HOST_IP}:${MQTT_WS_PORT}
 板子 MQTT: mqtt://${HOST_IP}:${MQTT_TCP_PORT}
-本地串口桥: ws://localhost:${SERIAL_WS_PORT} -> ${LABGUARD_PORT}
+本地串口桥: $([ "$ENABLE_SERIAL_BRIDGE" = "1" ] && printf 'ws://localhost:%s -> %s' "$SERIAL_WS_PORT" "$LABGUARD_PORT" || printf '未启动')
 Expo: exp://${HOST_IP}:${EXPO_PORT}
 ========================================
 
@@ -120,7 +123,7 @@ free_startup_ports
 echo "[start] 启动 dashboard + MQTT broker..."
 (
   cd "$DASHBOARD_DIR"
-  HOST_IP="$HOST_IP" WEB_PORT="$WEB_PORT" MQTT_WS_PORT="$MQTT_WS_PORT" MQTT_TCP_PORT="$MQTT_TCP_PORT" SERIAL_WS_PORT="$SERIAL_WS_PORT" LABGUARD_PORT="$LABGUARD_PORT" FORCE_FREE_PORTS=0 ./run_dashboard_stack.sh
+  HOST_IP="$HOST_IP" WEB_PORT="$WEB_PORT" MQTT_WS_PORT="$MQTT_WS_PORT" MQTT_TCP_PORT="$MQTT_TCP_PORT" SERIAL_WS_PORT="$SERIAL_WS_PORT" LABGUARD_PORT="$LABGUARD_PORT" ENABLE_SERIAL_BRIDGE="$ENABLE_SERIAL_BRIDGE" FORCE_FREE_PORTS=0 ./run_dashboard_stack.sh
 ) &
 DASHBOARD_PID=$!
 
@@ -149,7 +152,11 @@ echo "  Dashboard: http://localhost:${WEB_PORT}"
 echo "  局域网 Dashboard: http://${HOST_IP}:${WEB_PORT}"
 echo "  手机 MQTT WS: ws://${HOST_IP}:${MQTT_WS_PORT}"
 echo "  板子 MQTT: mqtt://${HOST_IP}:${MQTT_TCP_PORT}"
-echo "  本地串口桥: ws://localhost:${SERIAL_WS_PORT} -> ${LABGUARD_PORT}"
+if [ "$ENABLE_SERIAL_BRIDGE" = "1" ]; then
+  echo "  本地串口桥: ws://localhost:${SERIAL_WS_PORT} -> ${LABGUARD_PORT}"
+else
+  echo "  本地串口桥: 未启动"
+fi
 echo "  Expo: exp://${HOST_IP}:${EXPO_PORT}"
 echo
 

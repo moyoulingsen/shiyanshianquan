@@ -145,14 +145,14 @@
         <div class="button-row">
           <button data-command="reset" type="button">重置</button>
           <button id="audio-toggle" class="toggle-control is-off" type="button">声音：关闭</button>
-          <button id="light-toggle" class="toggle-control is-off" type="button">灯光：关闭</button>
+          <button id="light-toggle" class="toggle-control is-off" type="button">灯带：关闭</button>
           <div class="actuator-control" data-actuator-panel="fan">
             <button id="fan-toggle" class="toggle-control is-off" data-toggle-actuator="fan" type="button">风扇：关闭</button>
             <label class="slider-panel hidden" id="fan-slider-panel">
-              <span>风扇电压 / 速度</span>
+              <span>风扇有效档位</span>
               <div class="slider-row">
                 <button class="step-button" type="button" data-step-actuator="fan" data-step-delta="-1" aria-label="风扇减少">−</button>
-                <input id="fan-slider" type="range" min="0" max="100" step="1" value="100" data-level-actuator="fan" />
+                <input id="fan-slider" type="range" min="60" max="100" step="1" value="100" data-level-actuator="fan" />
                 <button class="step-button" type="button" data-step-actuator="fan" data-step-delta="1" aria-label="风扇增加">+</button>
                 <output id="fan-slider-value">100%</output>
               </div>
@@ -161,10 +161,10 @@
           <div class="actuator-control" data-actuator-panel="pump">
             <button id="pump-toggle" class="toggle-control is-off" data-toggle-actuator="pump" type="button">水泵：关闭</button>
             <label class="slider-panel hidden" id="pump-slider-panel">
-              <span>水泵电压 / 速度</span>
+              <span>水泵有效档位</span>
               <div class="slider-row">
                 <button class="step-button" type="button" data-step-actuator="pump" data-step-delta="-1" aria-label="水泵减少">−</button>
-                <input id="pump-slider" type="range" min="0" max="100" step="1" value="100" data-level-actuator="pump" />
+                <input id="pump-slider" type="range" min="55" max="100" step="1" value="100" data-level-actuator="pump" />
                 <button class="step-button" type="button" data-step-actuator="pump" data-step-delta="1" aria-label="水泵增加">+</button>
                 <output id="pump-slider-value">100%</output>
               </div>

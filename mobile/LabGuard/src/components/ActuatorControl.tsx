@@ -4,6 +4,11 @@ import Slider from '@react-native-community/slider'
 import type { ActuatorName, ActuatorState } from '../types'
 import { toggleActuator, updateActuatorLevel } from '../mqtt/client'
 
+const actuatorMinLevel: Record<ActuatorName, number> = {
+  fan: 60,
+  pump: 55
+}
+
 type Props = {
   name: ActuatorName
   title: string
@@ -11,12 +16,15 @@ type Props = {
 }
 
 export function ActuatorControl({ name, title, state }: Props) {
+  const minLevel = actuatorMinLevel[name]
+  const displayLevel = Math.max(minLevel, state.level)
+
   return (
     <View style={styles.card}>
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>电压 / 速度 {state.level}%</Text>
+          <Text style={styles.subtitle}>有效档位 {displayLevel}%</Text>
         </View>
         <Pressable
           style={[styles.toggle, state.on ? styles.toggleOn : styles.toggleOff]}
@@ -32,16 +40,16 @@ export function ActuatorControl({ name, title, state }: Props) {
         <View style={styles.levelWrap}>
           <Slider
             style={styles.slider}
-            minimumValue={0}
+            minimumValue={minLevel}
             maximumValue={100}
             step={1}
-            value={state.level}
+            value={displayLevel}
             minimumTrackTintColor="#17685f"
             maximumTrackTintColor="#ccd7d3"
             thumbTintColor="#17685f"
             onSlidingComplete={(value) => updateActuatorLevel(name, value, state.on)}
           />
-          <Text style={styles.levelText}>{state.level}%</Text>
+          <Text style={styles.levelText}>{displayLevel}%</Text>
         </View>
         <Pressable style={styles.stepButton} onPress={() => updateActuatorLevel(name, state.level + 5, state.on)}>
           <Text style={styles.stepText}>+</Text>

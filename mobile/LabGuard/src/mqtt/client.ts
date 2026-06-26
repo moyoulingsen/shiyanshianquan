@@ -24,6 +24,10 @@ const clientId = `labguard_mobile_${Math.random().toString(16).slice(2)}`
 let client: MqttClient | null = null
 let mqttModule: MqttModule | null = null
 let lastRiskLevel = 0
+const actuatorMinLevel: Record<ActuatorName, number> = {
+  fan: 60,
+  pump: 55
+}
 const riskKeys: RiskKey[] = ['normal', 'warning', 'alarm', 'emergency']
 
 async function loadMqtt() {
@@ -68,6 +72,10 @@ function boolLabel(value: unknown) {
   return Boolean(value)
 }
 
+function hasOwn(payload: Record<string, unknown>, key: string) {
+  return Object.prototype.hasOwnProperty.call(payload, key)
+}
+
 function addLog(topic: string, payload: unknown) {
   useLabguardStore.getState().addLog({
     id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
@@ -107,16 +115,32 @@ function updateRisk(payload: Record<string, unknown>) {
   const fanOn = boolLabel(payload.action_fan ?? actions.includes('fan_on'))
   const pumpOn = boolLabel(payload.action_pump ?? actions.includes('pump_on'))
   const alarmOn = boolLabel(payload.action_alarm ?? actions.includes('alarm_on'))
+  const hasManualFan = hasOwn(payload, 'manual_fan')
+  const hasManualPump = hasOwn(payload, 'manual_pump')
+  const manualFanOverride = hasOwn(payload, 'manual_fan_override') ? boolLabel(payload.manual_fan_override) : hasManualFan
+  const manualPumpOverride = hasOwn(payload, 'manual_pump_override') ? boolLabel(payload.manual_pump_override) : hasManualPump
+  const manualFanOn = boolLabel(payload.manual_fan)
+  const manualPumpOn = boolLabel(payload.manual_pump)
   const fanLevel = Number.isFinite(Number(payload.fan_level_pct)) ? Number(payload.fan_level_pct) : fanOn ? 100 : 0
   const pumpLevel = Number.isFinite(Number(payload.pump_level_pct)) ? Number(payload.pump_level_pct) : pumpOn ? 100 : 0
+  const manualFanLevel = Number.isFinite(Number(payload.manual_fan_level_pct))
+    ? Number(payload.manual_fan_level_pct)
+    : store.fan.level
+  const manualPumpLevel = Number.isFinite(Number(payload.manual_pump_level_pct))
+    ? Number(payload.manual_pump_level_pct)
+    : store.pump.level
+  const fanButtonOn = manualFanOverride ? manualFanOn : fanOn
+  const pumpButtonOn = manualPumpOverride ? manualPumpOn : pumpOn
+  const fanButtonLevel = manualFanOverride ? manualFanLevel : fanLevel
+  const pumpButtonLevel = manualPumpOverride ? manualPumpLevel : pumpLevel
 
   store.setRisk({
     level: safeLevel,
     label,
     text: riskDisplayText(safeLevel, payload.risk_text)
   })
-  store.setActuator('fan', { on: fanOn, level: fanLevel })
-  store.setActuator('pump', { on: pumpOn, level: pumpLevel })
+  store.setActuator('fan', { on: fanButtonOn, level: fanButtonLevel })
+  store.setActuator('pump', { on: pumpButtonOn, level: pumpButtonLevel })
   store.setAlarmOn(alarmOn)
 
   if (safeLevel >= 2 && safeLevel !== lastRiskLevel) {
@@ -280,7 +304,7 @@ export function toggleActuator(name: ActuatorName) {
 }
 
 export function updateActuatorLevel(name: ActuatorName, level: number, publish = false) {
-  const safeLevel = Math.max(0, Math.min(100, Number(level) || 0))
+  const safeLevel = Math.max(actuatorMinLevel[name], Math.min(100, Number(level) || actuatorMinLevel[name]))
   const store = useLabguardStore.getState()
   const current = store[name]
   store.setActuator(name, { level: safeLevel })

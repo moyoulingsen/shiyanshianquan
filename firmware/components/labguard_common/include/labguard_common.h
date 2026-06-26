@@ -78,6 +78,8 @@ typedef struct {
     bool auto_alarm;
     bool auto_fan;
     bool auto_pump;
+    bool manual_fan_override;
+    bool manual_pump_override;
     bool manual_fan;
     bool manual_pump;
     int fan_level_pct;
@@ -94,6 +96,8 @@ typedef struct {
     int64_t uptime_s;
     int wifi_rssi;
     const char *version;
+    bool audio_looping;
+    bool light_on;
     int64_t timestamp;
 } labguard_status_t;
 

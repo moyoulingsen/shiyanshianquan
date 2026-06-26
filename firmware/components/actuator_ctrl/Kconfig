@@ -21,7 +21,7 @@ menu "LabGuard hardware actuator control"
     config LABGUARD_ACTUATOR_LIGHT_GPIO
         int "Demo light MOSFET control GPIO"
         range -1 54
-        default 32
+        default 60
 
     config LABGUARD_ACTUATOR_LIGHT_ACTIVE_LOW
         bool "Demo light channel is active low"
@@ -35,7 +35,7 @@ menu "LabGuard hardware actuator control"
     config LABGUARD_ACTUATOR_LIGHT_LED_COUNT
         int "LED strip pixel count"
         range 1 256
-        default 8
+        default 32
         help
             Number of WS2812/SK6812-compatible RGB pixels driven from the
             configured LED strip data GPIO.

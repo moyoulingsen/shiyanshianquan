@@ -1,0 +1,31 @@
+# Non-default ESP-DL SD-card probe POC overlay.
+# Use only with an isolated build directory; do not merge into normal defaults.
+
+CONFIG_LABGUARD_ESPDL_PROBE_ENABLE=y
+CONFIG_LABGUARD_ESPDL_PROBE_RUN_ON_BOOT=y
+# CONFIG_LABGUARD_ESPDL_PROBE_LOAD_RODATA is not set
+CONFIG_LABGUARD_ESPDL_PROBE_LOAD_SDCARD=y
+CONFIG_LABGUARD_ESPDL_PROBE_SDCARD_PATH="/sdcard/model.espdl"
+CONFIG_LABGUARD_ESPDL_PROBE_SORT_PROFILE_BY_LATENCY=y
+
+# Minimize the POC image to measure the lower bound of ESP-DL runtime size.
+# CONFIG_COMPILER_OPTIMIZATION_DEBUG is not set
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+
+# ESP-DL pixel conversion helpers are not used by this isolated model->test()
+# probe, so they are disabled in this non-default size experiment.
+# CONFIG_PIX_CVT_RGB565_TO_RGB565_SUPPORT is not set
+# CONFIG_PIX_CVT_RGB565_TO_RGB888_SUPPORT is not set
+# CONFIG_PIX_CVT_RGB565_TO_GRAY_SUPPORT is not set
+# CONFIG_PIX_CVT_RGB565_TO_HSV_SUPPORT is not set
+# CONFIG_PIX_CVT_RGB888_TO_RGB888_SUPPORT is not set
+# CONFIG_PIX_CVT_RGB888_TO_RGB565_SUPPORT is not set
+# CONFIG_PIX_CVT_RGB888_TO_GRAY_SUPPORT is not set
+# CONFIG_PIX_CVT_RGB888_TO_HSV_SUPPORT is not set
+# CONFIG_PIX_CVT_GRAY_TO_GRAY_SUPPORT is not set
+# CONFIG_PIX_CVT_HSV_TO_HSV_MASK_SUPPORT is not set
+# CONFIG_PIX_CVT_YUV_TO_RGB888_SUPPORT is not set
+# CONFIG_PIX_CVT_YUV_TO_RGB565_SUPPORT is not set
+# CONFIG_PIX_CVT_YUV_TO_GRAY_SUPPORT is not set
+# CONFIG_PIX_CVT_YUV_TO_HSV_SUPPORT is not set
+# CONFIG_PIX_CVT_YUV_TO_YUV_SUPPORT is not set

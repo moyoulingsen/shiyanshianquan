@@ -9,24 +9,34 @@
 #include <string.h>
 
 #include "driver/i2s_std.h"
+#include "driver/gpio.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "sdkconfig.h"
 
+#ifndef CONFIG_LABGUARD_AUDIO_PROMPT_SD_MODE_GPIO
+#define CONFIG_LABGUARD_AUDIO_PROMPT_SD_MODE_GPIO -1
+#endif
+
 static const char *TAG = "audio_prompt";
 static audio_prompt_t s_last_prompt = AUDIO_PROMPT_TOXIC_GAS;
 
-#define AUDIO_PROMPT_PCM_SAMPLE_RATE_HZ 16000
+#define AUDIO_PROMPT_DEFAULT_SAMPLE_RATE_HZ 16000
+#define AUDIO_PROMPT_MIN_SAMPLE_RATE_HZ 8000
+#define AUDIO_PROMPT_MAX_SAMPLE_RATE_HZ 48000
 #define AUDIO_PROMPT_PCM_BITS_PER_SAMPLE 16
-#define AUDIO_PROMPT_FRAME_BYTES 4
+#define AUDIO_PROMPT_SAMPLE_BYTES 2
+#define AUDIO_PROMPT_STEREO_FRAME_BYTES 4
 #define AUDIO_PROMPT_IO_BUFFER_BYTES 1024
 #define AUDIO_PROMPT_PATH_BYTES 160
 #define AUDIO_PROMPT_MAX_LOOP_FILES 48
 #define AUDIO_PROMPT_LOOP_TASK_STACK 8192
 #define AUDIO_PROMPT_LOOP_IDLE_MS 1500
 #define AUDIO_PROMPT_LOOP_BETWEEN_FILES_MS 80
+#define AUDIO_PROMPT_QUIESCE_MS 120
+#define AUDIO_PROMPT_AMP_SETTLE_MS 3
 
 typedef struct __attribute__((packed)) {
     char riff[4];
@@ -59,9 +69,42 @@ typedef struct {
 
 static i2s_chan_handle_t s_tx_chan;
 static bool s_i2s_ready;
+static bool s_i2s_enabled;
+static uint32_t s_i2s_sample_rate_hz;
 static SemaphoreHandle_t s_play_mutex;
 static TaskHandle_t s_loop_task;
 static volatile bool s_loop_enabled;
+static bool s_amp_enabled;
+
+static void audio_prompt_set_amp_enabled(bool enabled)
+{
+#if CONFIG_LABGUARD_AUDIO_PROMPT_SD_MODE_GPIO >= 0
+    gpio_set_level(CONFIG_LABGUARD_AUDIO_PROMPT_SD_MODE_GPIO, enabled ? 1 : 0);
+#endif
+    s_amp_enabled = enabled;
+}
+
+static esp_err_t audio_prompt_init_amp(void)
+{
+    s_amp_enabled = false;
+#if CONFIG_LABGUARD_AUDIO_PROMPT_SD_MODE_GPIO >= 0
+    gpio_config_t cfg = {
+        .pin_bit_mask = 1ULL << CONFIG_LABGUARD_AUDIO_PROMPT_SD_MODE_GPIO,
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    esp_err_t ret = gpio_config(&cfg);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    audio_prompt_set_amp_enabled(false);
+    ESP_LOGI(TAG, "audio amplifier SD/MODE initialized GPIO%d",
+             CONFIG_LABGUARD_AUDIO_PROMPT_SD_MODE_GPIO);
+#endif
+    return ESP_OK;
+}
 
 static bool prompt_file_path(audio_prompt_t prompt, char *path, size_t path_size)
 {
@@ -238,18 +281,27 @@ static esp_err_t wav_read_header(FILE *file, wav_info_t *out)
         return ESP_ERR_NOT_FOUND;
     }
     if (out->audio_format != 1) {
+        ESP_LOGW(TAG, "unsupported wav format=%u, need PCM", out->audio_format);
         return ESP_ERR_NOT_SUPPORTED;
     }
     if (out->bits_per_sample != AUDIO_PROMPT_PCM_BITS_PER_SAMPLE) {
+        ESP_LOGW(TAG, "unsupported wav bits=%u, need %d", out->bits_per_sample, AUDIO_PROMPT_PCM_BITS_PER_SAMPLE);
         return ESP_ERR_NOT_SUPPORTED;
     }
-    if (out->sample_rate != AUDIO_PROMPT_PCM_SAMPLE_RATE_HZ) {
+    if (out->sample_rate < AUDIO_PROMPT_MIN_SAMPLE_RATE_HZ ||
+        out->sample_rate > AUDIO_PROMPT_MAX_SAMPLE_RATE_HZ) {
+        ESP_LOGW(TAG, "unsupported wav sample_rate=%lu, need %d..%d",
+                 (unsigned long)out->sample_rate,
+                 AUDIO_PROMPT_MIN_SAMPLE_RATE_HZ,
+                 AUDIO_PROMPT_MAX_SAMPLE_RATE_HZ);
         return ESP_ERR_NOT_SUPPORTED;
     }
     if (!(out->num_channels == 1 || out->num_channels == 2)) {
+        ESP_LOGW(TAG, "unsupported wav channels=%u, need mono or stereo", out->num_channels);
         return ESP_ERR_NOT_SUPPORTED;
     }
     if (out->block_align == 0) {
+        ESP_LOGW(TAG, "invalid wav block_align=0");
         return ESP_ERR_INVALID_SIZE;
     }
 
@@ -265,8 +317,8 @@ static esp_err_t audio_prompt_init_i2s(void)
     }
 
     i2s_std_config_t std_cfg = {
-        .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(AUDIO_PROMPT_PCM_SAMPLE_RATE_HZ),
-        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO),
+        .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(AUDIO_PROMPT_DEFAULT_SAMPLE_RATE_HZ),
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = {
             .mclk = I2S_GPIO_UNUSED,
             .bclk = CONFIG_LABGUARD_AUDIO_PROMPT_I2S_BCLK_GPIO,
@@ -287,20 +339,127 @@ static esp_err_t audio_prompt_init_i2s(void)
         return ret;
     }
 
-    ret = i2s_channel_enable(s_tx_chan);
-    if (ret != ESP_OK) {
-        i2s_del_channel(s_tx_chan);
-        s_tx_chan = NULL;
-        return ret;
-    }
-
     s_i2s_ready = true;
+    s_i2s_enabled = false;
+    s_i2s_sample_rate_hz = AUDIO_PROMPT_DEFAULT_SAMPLE_RATE_HZ;
     ESP_LOGI(TAG,
-             "audio I2S initialized format=philips DIN=GPIO%d BCLK=GPIO%d WS=GPIO%d",
+             "audio I2S initialized format=philips stereo DIN=GPIO%d BCLK=GPIO%d WS=GPIO%d",
              CONFIG_LABGUARD_AUDIO_PROMPT_I2S_DOUT_GPIO,
              CONFIG_LABGUARD_AUDIO_PROMPT_I2S_BCLK_GPIO,
              CONFIG_LABGUARD_AUDIO_PROMPT_I2S_WS_GPIO);
     return ESP_OK;
+}
+
+static esp_err_t audio_prompt_enable_i2s(void)
+{
+    if (!s_i2s_ready || s_tx_chan == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (s_i2s_enabled) {
+        return ESP_OK;
+    }
+
+    esp_err_t ret = i2s_channel_enable(s_tx_chan);
+    if (ret == ESP_OK) {
+        s_i2s_enabled = true;
+    }
+    return ret;
+}
+
+static esp_err_t audio_prompt_disable_i2s(void)
+{
+    if (!s_i2s_ready || s_tx_chan == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (!s_i2s_enabled) {
+        return ESP_OK;
+    }
+
+    esp_err_t ret = i2s_channel_disable(s_tx_chan);
+    if (ret == ESP_OK) {
+        s_i2s_enabled = false;
+    }
+    return ret;
+}
+
+static esp_err_t audio_prompt_set_sample_rate(uint32_t sample_rate_hz)
+{
+    if (!s_i2s_ready || s_tx_chan == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (sample_rate_hz == s_i2s_sample_rate_hz) {
+        return ESP_OK;
+    }
+
+    bool was_enabled = s_i2s_enabled;
+    esp_err_t ret = audio_prompt_disable_i2s();
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    i2s_std_clk_config_t clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(sample_rate_hz);
+    ret = i2s_channel_reconfig_std_clock(s_tx_chan, &clk_cfg);
+    if (ret != ESP_OK) {
+        if (was_enabled) {
+            esp_err_t enable_ret = audio_prompt_enable_i2s();
+            if (enable_ret != ESP_OK) {
+                ESP_LOGW(TAG, "I2S re-enable also failed after clock error: %s", esp_err_to_name(enable_ret));
+            }
+        }
+        return ret;
+    }
+
+    s_i2s_sample_rate_hz = sample_rate_hz;
+    if (was_enabled) {
+        ret = audio_prompt_enable_i2s();
+        if (ret != ESP_OK) {
+            return ret;
+        }
+    }
+    ESP_LOGI(TAG, "audio I2S sample rate set to %lu Hz", (unsigned long)sample_rate_hz);
+    return ESP_OK;
+}
+
+static esp_err_t audio_prompt_write_silence_ms(uint32_t duration_ms)
+{
+    if (!s_i2s_ready || s_tx_chan == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (!s_i2s_enabled) {
+        return ESP_OK;
+    }
+
+    const uint32_t bytes_per_ms = (s_i2s_sample_rate_hz * AUDIO_PROMPT_STEREO_FRAME_BYTES) / 1000;
+    uint32_t remaining = bytes_per_ms * duration_ms;
+    uint8_t silence[AUDIO_PROMPT_IO_BUFFER_BYTES] = {0};
+    while (remaining > 0) {
+        size_t chunk = remaining > sizeof(silence) ? sizeof(silence) : remaining;
+        size_t bytes_written = 0;
+        esp_err_t ret = i2s_channel_write(s_tx_chan, silence, chunk, &bytes_written, 200);
+        if (ret != ESP_OK) {
+            return ret;
+        }
+        if (bytes_written == 0) {
+            return ESP_ERR_TIMEOUT;
+        }
+        remaining -= (uint32_t)bytes_written;
+    }
+
+    return ESP_OK;
+}
+
+static esp_err_t audio_prompt_quiesce_i2s(void)
+{
+    if (!s_i2s_ready || s_tx_chan == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    esp_err_t ret = audio_prompt_write_silence_ms(AUDIO_PROMPT_QUIESCE_MS);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    return audio_prompt_disable_i2s();
 }
 
 static esp_err_t audio_prompt_write_pcm(FILE *file, const wav_info_t *wav, bool loop_controlled)
@@ -329,7 +488,7 @@ static esp_err_t audio_prompt_write_pcm(FILE *file, const wav_info_t *wav, bool 
         size_t write_bytes = read_bytes;
 
         if (wav->num_channels == 1) {
-            size_t sample_count = read_bytes / 2;
+            size_t sample_count = read_bytes / AUDIO_PROMPT_SAMPLE_BYTES;
             int16_t *src = (int16_t *)read_buf;
             int16_t *dst = (int16_t *)stereo_buf;
             for (size_t i = 0; i < sample_count; ++i) {
@@ -337,7 +496,7 @@ static esp_err_t audio_prompt_write_pcm(FILE *file, const wav_info_t *wav, bool 
                 dst[i * 2 + 1] = src[i];
             }
             write_ptr = stereo_buf;
-            write_bytes = sample_count * AUDIO_PROMPT_FRAME_BYTES;
+            write_bytes = sample_count * AUDIO_PROMPT_STEREO_FRAME_BYTES;
         }
 
         size_t total_written = 0;
@@ -371,27 +530,62 @@ static esp_err_t audio_prompt_play_path(const char *path, bool loop_controlled)
         return ESP_ERR_INVALID_STATE;
     }
 
-    if (s_play_mutex != NULL) {
-        xSemaphoreTake(s_play_mutex, portMAX_DELAY);
-    }
-
     FILE *file = fopen(path, "rb");
     if (file == NULL) {
-        if (s_play_mutex != NULL) {
-            xSemaphoreGive(s_play_mutex);
-        }
+        ESP_LOGW(TAG, "open wav failed path=%s", path);
         return ESP_ERR_NOT_FOUND;
+    }
+
+    if (s_play_mutex != NULL) {
+        xSemaphoreTake(s_play_mutex, portMAX_DELAY);
     }
 
     wav_info_t wav = {0};
     esp_err_t ret = wav_read_header(file, &wav);
     if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "invalid wav path=%s: %s", path, esp_err_to_name(ret));
         fclose(file);
+        if (!loop_controlled || !s_loop_enabled) {
+            audio_prompt_set_amp_enabled(false);
+        }
         if (s_play_mutex != NULL) {
             xSemaphoreGive(s_play_mutex);
         }
         return ret;
     }
+
+    ret = audio_prompt_set_sample_rate(wav.sample_rate);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG,
+                 "set wav sample rate failed path=%s rate=%lu: %s",
+                 path,
+                 (unsigned long)wav.sample_rate,
+                 esp_err_to_name(ret));
+        fclose(file);
+        if (!loop_controlled || !s_loop_enabled) {
+            audio_prompt_set_amp_enabled(false);
+        }
+        if (s_play_mutex != NULL) {
+            xSemaphoreGive(s_play_mutex);
+        }
+        return ret;
+    }
+
+    ret = audio_prompt_enable_i2s();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "audio I2S enable failed path=%s: %s", path, esp_err_to_name(ret));
+        fclose(file);
+        if (!loop_controlled || !s_loop_enabled) {
+            audio_prompt_set_amp_enabled(false);
+        }
+        if (s_play_mutex != NULL) {
+            xSemaphoreGive(s_play_mutex);
+        }
+        return ret;
+    }
+
+    audio_prompt_set_amp_enabled(true);
+    vTaskDelay(pdMS_TO_TICKS(AUDIO_PROMPT_AMP_SETTLE_MS));
 
     ESP_LOGI(TAG,
              "playing wav path=%s channels=%u rate=%lu data=%lu",
@@ -401,7 +595,17 @@ static esp_err_t audio_prompt_play_path(const char *path, bool loop_controlled)
              (unsigned long)wav.data_size);
 
     ret = audio_prompt_write_pcm(file, &wav, loop_controlled);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "wav playback failed path=%s: %s", path, esp_err_to_name(ret));
+    }
     fclose(file);
+    if (!loop_controlled || !s_loop_enabled) {
+        esp_err_t quiet_ret = audio_prompt_quiesce_i2s();
+        if (quiet_ret != ESP_OK) {
+            ESP_LOGW(TAG, "audio I2S quiesce failed after playback: %s", esp_err_to_name(quiet_ret));
+        }
+        audio_prompt_set_amp_enabled(false);
+    }
     if (s_play_mutex != NULL) {
         xSemaphoreGive(s_play_mutex);
     }
@@ -464,6 +668,11 @@ static void audio_prompt_loop_task(void *arg)
     }
 
     free(paths);
+    esp_err_t quiet_ret = audio_prompt_quiesce_i2s();
+    if (quiet_ret != ESP_OK) {
+        ESP_LOGW(TAG, "audio I2S quiesce failed after loop stop: %s", esp_err_to_name(quiet_ret));
+    }
+    audio_prompt_set_amp_enabled(false);
     ESP_LOGI(TAG, "audio loop stopped");
     s_loop_task = NULL;
     vTaskDelete(NULL);
@@ -480,6 +689,11 @@ esp_err_t audio_prompt_init(void)
     s_last_prompt = AUDIO_PROMPT_TOXIC_GAS;
     s_loop_enabled = false;
     s_loop_task = NULL;
+    esp_err_t amp_ret = audio_prompt_init_amp();
+    if (amp_ret != ESP_OK) {
+        ESP_LOGW(TAG, "audio amplifier control init failed: %s", esp_err_to_name(amp_ret));
+        return amp_ret;
+    }
     if (s_play_mutex == NULL) {
         s_play_mutex = xSemaphoreCreateMutex();
         if (s_play_mutex == NULL) {
@@ -512,6 +726,23 @@ esp_err_t audio_prompt_start_loop(void)
         return ESP_OK;
     }
 
+    char first_path[1][AUDIO_PROMPT_PATH_BYTES];
+    int file_count = scan_audio_files(first_path, 1);
+    if (file_count < 0) {
+        ESP_LOGW(TAG,
+                 "audio loop start failed, directory unavailable: %s%s",
+                 CONFIG_LABGUARD_AUDIO_PROMPT_SD_MOUNT_POINT,
+                 CONFIG_LABGUARD_AUDIO_PROMPT_DIR);
+        return ESP_ERR_NOT_FOUND;
+    }
+    if (file_count == 0) {
+        ESP_LOGW(TAG,
+                 "audio loop start failed, no wav files found in %s%s",
+                 CONFIG_LABGUARD_AUDIO_PROMPT_SD_MOUNT_POINT,
+                 CONFIG_LABGUARD_AUDIO_PROMPT_DIR);
+        return ESP_ERR_NOT_FOUND;
+    }
+
     s_loop_enabled = true;
     BaseType_t task_ret = xTaskCreate(audio_prompt_loop_task,
                                       "audio_loop",
@@ -530,12 +761,21 @@ esp_err_t audio_prompt_start_loop(void)
 esp_err_t audio_prompt_stop_loop(void)
 {
     s_loop_enabled = false;
+    audio_prompt_set_amp_enabled(false);
+    if (s_play_mutex != NULL && xSemaphoreTake(s_play_mutex, pdMS_TO_TICKS(200)) == pdTRUE) {
+        esp_err_t ret = audio_prompt_quiesce_i2s();
+        xSemaphoreGive(s_play_mutex);
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "audio I2S quiesce failed on stop: %s", esp_err_to_name(ret));
+            return ret;
+        }
+    }
     return ESP_OK;
 }
 
 bool audio_prompt_is_looping(void)
 {
-    return s_loop_enabled && s_loop_task != NULL;
+    return s_loop_enabled;
 }
 
 audio_prompt_t audio_prompt_get_last(void)

@@ -52,9 +52,22 @@ const els = {
 }
 
 const actuatorState = {
-  fan: { on: false, level: 100 },
-  pump: { on: false, level: 100 }
+  fan: { on: false, level: 100, source: 'off' },
+  pump: { on: false, level: 100, source: 'off' }
 }
+const actuatorMinLevel = {
+  fan: 60,
+  pump: 55
+}
+const actuatorCommandPendingUntil = {
+  fan: 0,
+  pump: 0
+}
+const actuatorManualOverride = {
+  fan: false,
+  pump: false
+}
+const actuatorPendingHoldMs = 3000
 
 let audioToggleOn = false
 let lightToggleOn = false
@@ -159,6 +172,14 @@ function boolLabel(value) {
   return value ? '开启' : '关闭'
 }
 
+function hasOwn(object, key) {
+  return Object.prototype.hasOwnProperty.call(object, key)
+}
+
+function actuatorRiskText(finalOn, autoOn, manualOn, manualOverride) {
+  return `最终${boolLabel(finalOn)} / 自动${boolLabel(autoOn)} / 手动${manualOverride ? boolLabel(manualOn) : '未接管'}`
+}
+
 function updateDemoToggle(button, label, isOn) {
   if (!button) return
   button.textContent = `${label}：${isOn ? '开启' : '关闭'}`
@@ -173,7 +194,25 @@ function setAudioToggleState(isOn) {
 
 function setLightToggleState(isOn) {
   lightToggleOn = Boolean(isOn)
-  updateDemoToggle(els.lightToggle, '灯光', lightToggleOn)
+  updateDemoToggle(els.lightToggle, '灯带', lightToggleOn)
+}
+
+function resetLocalControlState() {
+  actuatorManualOverride.fan = false
+  actuatorManualOverride.pump = false
+  clearActuatorCommandPending('fan')
+  clearActuatorCommandPending('pump')
+  setActuatorState('fan', false, 100, 'off')
+  setActuatorState('pump', false, 100, 'off')
+  setAudioToggleState(false)
+  setLightToggleState(false)
+}
+
+function actuatorSourceText(source) {
+  if (source === 'manual') return '（手动）'
+  if (source === 'auto') return '（自动）'
+  if (source === 'mixed') return '（手动+自动）'
+  return ''
 }
 
 function updateActuatorButton(actuator) {
@@ -184,8 +223,8 @@ function updateActuatorButton(actuator) {
   if (!button || !panel || !slider || !value) return
 
   const label = actuator === 'fan' ? '风扇' : '水泵'
-  const { on, level } = actuatorState[actuator]
-  button.textContent = `${label}：${on ? '开启' : '关闭'}`
+  const { on, level, source } = actuatorState[actuator]
+  button.textContent = `${label}：${on ? '开启' : '关闭'}${on ? actuatorSourceText(source) : ''}`
   button.classList.toggle('is-on', on)
   button.classList.toggle('is-off', !on)
   panel.classList.toggle('hidden', !on)
@@ -193,12 +232,42 @@ function updateActuatorButton(actuator) {
   value.textContent = `${level}%`
 }
 
-function setActuatorState(actuator, isOn, levelPct = actuatorState[actuator].level) {
+function setActuatorState(actuator, isOn, levelPct = actuatorState[actuator].level, source = actuatorState[actuator].source) {
   actuatorState[actuator] = {
     on: Boolean(isOn),
-    level: Math.max(0, Math.min(100, Number(levelPct) || 0))
+    level: Math.max(actuatorMinLevel[actuator], Math.min(100, Number(levelPct) || actuatorMinLevel[actuator])),
+    source: isOn ? source : 'off'
   }
   updateActuatorButton(actuator)
+}
+
+function markActuatorCommandPending(actuator) {
+  actuatorCommandPendingUntil[actuator] = Date.now() + actuatorPendingHoldMs
+}
+
+function commandPending(actuator) {
+  return Date.now() < actuatorCommandPendingUntil[actuator]
+}
+
+function clearActuatorCommandPending(actuator) {
+  actuatorCommandPendingUntil[actuator] = 0
+}
+
+function applyActuatorStateFromRisk(actuator, nextOn, nextLevel, nextSource, manualOverride, hasManualOverrideField) {
+  if (hasManualOverrideField) {
+    actuatorManualOverride[actuator] = manualOverride
+    clearActuatorCommandPending(actuator)
+  }
+
+  if (commandPending(actuator) && !hasManualOverrideField) {
+    return
+  }
+
+  if (actuatorManualOverride[actuator] && !manualOverride && !hasManualOverrideField) {
+    return
+  }
+
+  setActuatorState(actuator, nextOn, nextLevel, nextSource)
 }
 
 function updateLastSeen() {
@@ -294,19 +363,47 @@ function handleMessage(topic, payload) {
     const fanOn = Boolean(payload.action_fan ?? (Array.isArray(payload.actions) && payload.actions.includes('fan_on')))
     const pumpOn = Boolean(payload.action_pump ?? (Array.isArray(payload.actions) && payload.actions.includes('pump_on')))
     const alarmOn = Boolean(payload.action_alarm ?? (Array.isArray(payload.actions) && payload.actions.includes('alarm_on')))
+    const hasManualFanOverride = hasOwn(payload, 'manual_fan_override')
+    const hasManualPumpOverride = hasOwn(payload, 'manual_pump_override')
+    const hasManualFan = hasOwn(payload, 'manual_fan')
+    const hasManualPump = hasOwn(payload, 'manual_pump')
+    const manualFanOverride = hasManualFanOverride ? Boolean(payload.manual_fan_override) : hasManualFan
+    const manualPumpOverride = hasManualPumpOverride ? Boolean(payload.manual_pump_override) : hasManualPump
+    const manualFan = hasManualFan ? Boolean(payload.manual_fan) : actuatorState.fan.on
+    const manualPump = hasManualPump ? Boolean(payload.manual_pump) : actuatorState.pump.on
+    const autoFan = Boolean(payload.auto_fan ?? fanOn)
+    const autoPump = Boolean(payload.auto_pump ?? pumpOn)
     const fanLevel = Number.isFinite(Number(payload.fan_level_pct)) ? Number(payload.fan_level_pct) : (fanOn ? 100 : 0)
     const pumpLevel = Number.isFinite(Number(payload.pump_level_pct)) ? Number(payload.pump_level_pct) : (pumpOn ? 100 : 0)
-    els.fan.textContent = boolLabel(fanOn)
-    els.pump.textContent = boolLabel(pumpOn)
+    const manualFanLevel = Number.isFinite(Number(payload.manual_fan_level_pct))
+      ? Number(payload.manual_fan_level_pct)
+      : actuatorState.fan.level
+    const manualPumpLevel = Number.isFinite(Number(payload.manual_pump_level_pct))
+      ? Number(payload.manual_pump_level_pct)
+      : actuatorState.pump.level
+    const fanButtonOn = manualFanOverride ? manualFan : fanOn
+    const pumpButtonOn = manualPumpOverride ? manualPump : pumpOn
+    const fanButtonLevel = manualFanOverride ? manualFanLevel : fanLevel
+    const pumpButtonLevel = manualPumpOverride ? manualPumpLevel : pumpLevel
+    const fanButtonSource = manualFanOverride ? (manualFan ? 'manual' : 'off') : (fanOn ? 'auto' : 'off')
+    const pumpButtonSource = manualPumpOverride ? (manualPump ? 'manual' : 'off') : (pumpOn ? 'auto' : 'off')
+    els.fan.textContent = actuatorRiskText(fanOn, autoFan, manualFan, manualFanOverride)
+    els.pump.textContent = actuatorRiskText(pumpOn, autoPump, manualPump, manualPumpOverride)
     els.alarm.textContent = boolLabel(alarmOn)
-    setActuatorState('fan', fanOn, fanLevel)
-    setActuatorState('pump', pumpOn, pumpLevel)
+    applyActuatorStateFromRisk('fan', fanButtonOn, fanButtonLevel, fanButtonSource, manualFanOverride, hasManualFanOverride)
+    applyActuatorStateFromRisk('pump', pumpButtonOn, pumpButtonLevel, pumpButtonSource, manualPumpOverride, hasManualPumpOverride)
   }
 
   if (payload.type === 'status' || topic === 'labguard/device/status') {
     els.uptime.textContent = formatUptime(payload.uptime_s)
     els.rssi.textContent = Number.isFinite(Number(payload.wifi_rssi)) ? `${payload.wifi_rssi} dBm` : '--'
     els.version.textContent = payload.version ?? '--'
+    if (hasOwn(payload, 'audio_looping')) {
+      setAudioToggleState(Boolean(payload.audio_looping))
+    }
+    if (hasOwn(payload, 'light_on')) {
+      setLightToggleState(Boolean(payload.light_on))
+    }
   }
 
   if (payload.type === 'camera_frame' || topic === 'labguard/device/camera') {
@@ -346,6 +443,23 @@ function syncSourceFields() {
   els.mqttField.classList.toggle('hidden', !useMqtt)
 }
 
+function connectSelectedSource() {
+  if (els.source.value === 'mqtt') {
+    connectMqtt()
+  } else {
+    connectSerialBridge()
+  }
+}
+
+function fallbackSerialBridgeToMqtt(reason) {
+  if (connectedSource !== 'ws') return
+  els.source.value = 'mqtt'
+  syncSourceFields()
+  localStorage.setItem('labguard.dashboard.source', 'mqtt')
+  setConnection('pending', `${reason}，改用 MQTT...`)
+  connectMqtt()
+}
+
 function connectSerialBridge() {
   disconnect()
   connectedSource = 'ws'
@@ -358,7 +472,11 @@ function connectSerialBridge() {
   socket.addEventListener('close', () => {
     if (connectedSource === 'ws') setConnection('warn', '本地串口桥已断开')
   })
-  socket.addEventListener('error', () => setConnection('warn', '本地串口桥连接失败'))
+  socket.addEventListener('error', () => {
+    if (connectedSource !== 'ws') return
+    setConnection('warn', '本地串口桥连接失败')
+    fallbackSerialBridgeToMqtt('本地串口桥连接失败')
+  })
   socket.addEventListener('message', (event) => {
     let frame
     try {
@@ -372,6 +490,7 @@ function connectSerialBridge() {
         markTransportConnected(`串口已打开 ${frame.port ?? ''}，等待设备数据...`)
       } else {
         setConnection('warn', frame.message ?? `串口未打开 ${frame.port ?? ''}`)
+        fallbackSerialBridgeToMqtt('本地串口桥未打开串口')
       }
       return
     }
@@ -417,25 +536,28 @@ function connectMqtt() {
 }
 
 function sendCommand(command, extra = {}) {
-  const payload = JSON.stringify({
+  const commandPayload = {
     node: 'dashboard',
     type: 'command',
     command,
     target_node: 'device',
     ...extra,
     timestamp: Math.floor(Date.now() / 1000)
-  })
+  }
+  const payload = JSON.stringify(commandPayload)
 
   if (mqttClient?.connected) {
     mqttClient.publish('labguard/cmd/test', payload, { qos: 1 })
+    addLog('labguard/cmd/test', commandPayload)
     return true
   }
 
   if (socket?.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify({
       topic: 'labguard/cmd/test',
-      payload: JSON.parse(payload)
+      payload: commandPayload
     }))
+    addLog('labguard/cmd/test', commandPayload)
     return true
   }
 
@@ -448,26 +570,34 @@ function handleCommandToggle(currentState, setState, commandName) {
 
   if (!sendCommand(`${commandName}_${nextState ? 'on' : 'off'}`)) {
     setState(!nextState)
+    setConnection('warn', '命令未发送：请先连接 MQTT 或串口桥')
   }
 }
 
 function toggleActuator(actuator) {
-  const nextState = !actuatorState[actuator].on
-  const level = actuatorState[actuator].level
+  const previousState = { ...actuatorState[actuator] }
+  const nextState = !previousState.on
+  const level = previousState.level
   const command = `${actuator}_${nextState ? 'on' : 'off'}`
-  setActuatorState(actuator, nextState, level)
+  actuatorManualOverride[actuator] = true
+  markActuatorCommandPending(actuator)
+  setActuatorState(actuator, nextState, level, nextState ? 'manual' : 'off')
 
   if (!sendCommand(command, nextState ? { level_pct: level } : {})) {
-    setActuatorState(actuator, !nextState, level)
+    clearActuatorCommandPending(actuator)
+    actuatorManualOverride[actuator] = previousState.source === 'manual'
+    setActuatorState(actuator, previousState.on, previousState.level, previousState.source)
   }
 }
 
 function updateActuatorLevel(actuator, levelPct) {
-  const level = Math.max(0, Math.min(100, Number(levelPct) || 0))
+  const level = Math.max(actuatorMinLevel[actuator], Math.min(100, Number(levelPct) || actuatorMinLevel[actuator]))
   const { on } = actuatorState[actuator]
-  setActuatorState(actuator, on, level)
+  setActuatorState(actuator, on, level, on ? 'manual' : actuatorState[actuator].source)
 
   if (on) {
+    actuatorManualOverride[actuator] = true
+    markActuatorCommandPending(actuator)
     sendCommand(`${actuator}_on`, { level_pct: level })
   }
 }
@@ -494,18 +624,20 @@ els.cameraPreview.addEventListener('error', () => {
 
 els.source.addEventListener('change', () => {
   syncSourceFields()
+  connectSelectedSource()
 })
 
 els.connect.addEventListener('click', () => {
-  if (els.source.value === 'mqtt') {
-    connectMqtt()
-  } else {
-    connectSerialBridge()
-  }
+  connectSelectedSource()
 })
 
 document.querySelectorAll('[data-command]').forEach((button) => {
-  button.addEventListener('click', () => sendCommand(button.dataset.command))
+  button.addEventListener('click', () => {
+    const command = button.dataset.command
+    if (sendCommand(command) && command === 'reset') {
+      resetLocalControlState()
+    }
+  })
 })
 
 document.querySelectorAll('[data-toggle-actuator]').forEach((button) => {
@@ -556,7 +688,7 @@ window.setInterval(() => {
   }
 }, 1000)
 
-els.source.value = savedSource === 'mqtt' || savedSource === 'ws' ? savedSource : 'ws'
+els.source.value = 'mqtt'
 els.wsUrl.value = savedWsUrl || 'ws://localhost:8787'
 els.mqttUrl.value = savedMqttUrl || defaultMqttUrl
 syncSourceFields()
@@ -566,8 +698,4 @@ setActuatorState('fan', false, 100)
 setActuatorState('pump', false, 100)
 setAudioToggleState(false)
 setLightToggleState(false)
-if (els.source.value === 'mqtt') {
-  connectMqtt()
-} else {
-  connectSerialBridge()
-}
+connectSelectedSource()

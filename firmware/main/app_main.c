@@ -17,6 +17,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_vfs_fat.h"
+#include "espdl_probe.h"
 #include "indoor_camera_capture.h"
 #include "labguard_common.h"
 #include "labguard_net.h"
@@ -54,6 +55,9 @@ static unsigned char s_preview_b64[CAMERA_PREVIEW_B64_BYTES];
 static uint8_t *s_preview_jpeg;
 static size_t s_preview_jpeg_capacity;
 static jpeg_encoder_handle_t s_jpeg_encoder;
+static bool s_manual_audio_loop_requested;
+static bool s_auto_audio_loop_requested;
+static bool s_auto_audio_muted_until_normal;
 
 static int64_t now_seconds(void)
 {
@@ -79,6 +83,8 @@ static void publish_status(void)
         .uptime_s = now_seconds(),
         .wifi_rssi = labguard_net_get_rssi(),
         .version = LABGUARD_VERSION,
+        .audio_looping = audio_prompt_is_looping(),
+        .light_on = actuator_ctrl_get_light(),
         .timestamp = now_seconds(),
     };
     publish_json(LABGUARD_TOPIC_DEVICE_STATUS, labguard_status_to_json(&status));
@@ -96,6 +102,63 @@ static void publish_event(labguard_risk_level_t level, const char *event, const 
     };
     event_log_append_event(&message);
     publish_json(LABGUARD_TOPIC_EVENT, labguard_event_to_json(&message));
+}
+
+static void publish_current_risk_state(void)
+{
+    publish_json(LABGUARD_TOPIC_DEVICE_RISK,
+                 labguard_risk_state_to_json(actuator_ctrl_get_last_risk()));
+}
+
+static void publish_audio_failure_event(const char *event, esp_err_t ret)
+{
+    char actions[96];
+    snprintf(actions, sizeof(actions), "audio_error_%s", esp_err_to_name(ret));
+    publish_event(LABGUARD_RISK_WARNING, event, actions);
+}
+
+static void sync_auto_audio_loop(bool should_loop)
+{
+    if (should_loop) {
+        bool was_requested = s_auto_audio_loop_requested;
+        s_auto_audio_loop_requested = true;
+
+        if (s_auto_audio_muted_until_normal) {
+            if (!was_requested) {
+                publish_event(LABGUARD_RISK_ALARM, "auto_audio_muted", "user_muted_until_normal");
+            }
+            return;
+        }
+
+        if (audio_prompt_is_looping()) {
+            if (!was_requested) {
+                publish_event(LABGUARD_RISK_ALARM, "auto_audio_on", "audio_loop_already_on");
+            }
+            return;
+        }
+
+        esp_err_t ret = audio_prompt_start_loop();
+        if (ret == ESP_OK) {
+            publish_status();
+            publish_event(LABGUARD_RISK_ALARM, "auto_audio_on", "audio_loop_on");
+        } else {
+            s_auto_audio_loop_requested = false;
+            publish_audio_failure_event("auto_audio_on_failed", ret);
+        }
+        return;
+    }
+
+    s_auto_audio_muted_until_normal = false;
+    if (!s_auto_audio_loop_requested) {
+        return;
+    }
+    s_auto_audio_loop_requested = false;
+
+    if (!s_manual_audio_loop_requested && audio_prompt_is_looping()) {
+        audio_prompt_stop_loop();
+        publish_status();
+        publish_event(LABGUARD_RISK_NORMAL, "auto_audio_off", "audio_loop_off");
+    }
 }
 
 static uint8_t expand_rgb565_component(uint16_t value, int bits)
@@ -286,54 +349,93 @@ static void apply_command(const labguard_command_t *command)
 
     switch (command->type) {
     case LABGUARD_CMD_RESET:
+    {
+        const bool audio_was_looping = audio_prompt_is_looping();
+        const bool auto_alarm_was_active = s_auto_audio_loop_requested ||
+                                           actuator_ctrl_get_last_risk()->action_alarm;
         actuator_ctrl_set_fan(false);
         actuator_ctrl_set_pump(false);
+        actuator_ctrl_clear_manual_overrides();
         actuator_ctrl_set_light(false);
+        s_manual_audio_loop_requested = false;
+        s_auto_audio_loop_requested = false;
+        s_auto_audio_muted_until_normal = auto_alarm_was_active || audio_was_looping;
         audio_prompt_stop_loop();
+        publish_current_risk_state();
+        publish_status();
         publish_event(LABGUARD_RISK_NORMAL, "device_reset", "fan_off_pump_off_light_off_audio_off");
         break;
+    }
     case LABGUARD_CMD_FAN_ON:
         actuator_ctrl_set_fan_level(command->level_pct < 0 ? 100 : command->level_pct);
         actuator_ctrl_set_fan(true);
+        publish_current_risk_state();
         publish_event(LABGUARD_RISK_NORMAL, "manual_fan_on", "fan_on");
         break;
     case LABGUARD_CMD_FAN_OFF:
         actuator_ctrl_set_fan(false);
+        publish_current_risk_state();
         publish_event(LABGUARD_RISK_NORMAL, "manual_fan_off", "fan_off");
         break;
     case LABGUARD_CMD_PUMP_ON:
         actuator_ctrl_set_pump_level(command->level_pct < 0 ? 100 : command->level_pct);
         actuator_ctrl_set_pump(true);
+        publish_current_risk_state();
         publish_event(LABGUARD_RISK_NORMAL, "manual_pump_on", "pump_on");
         break;
     case LABGUARD_CMD_PUMP_OFF:
         actuator_ctrl_set_pump(false);
+        publish_current_risk_state();
         publish_event(LABGUARD_RISK_NORMAL, "manual_pump_off", "pump_off");
         break;
     case LABGUARD_CMD_ALARM_ON:
-        audio_prompt_play(AUDIO_PROMPT_TOXIC_GAS);
-        publish_event(LABGUARD_RISK_ALARM, "manual_alarm_on", "voice_alarm_on");
+    {
+        esp_err_t ret = audio_prompt_play(AUDIO_PROMPT_TOXIC_GAS);
+        if (ret == ESP_OK) {
+            publish_event(LABGUARD_RISK_ALARM, "manual_alarm_on", "voice_alarm_on");
+        } else {
+            publish_audio_failure_event("manual_alarm_on_failed", ret);
+        }
         break;
+    }
     case LABGUARD_CMD_ALARM_OFF:
         publish_event(LABGUARD_RISK_NORMAL, "manual_alarm_off", "voice_alarm_off");
         break;
     case LABGUARD_CMD_AUDIO_ON:
-        if (audio_prompt_start_loop() == ESP_OK) {
+    {
+        s_auto_audio_muted_until_normal = false;
+        esp_err_t ret = audio_prompt_start_loop();
+        if (ret == ESP_OK) {
+            s_manual_audio_loop_requested = true;
+            publish_status();
             publish_event(LABGUARD_RISK_NORMAL, "manual_audio_on", "audio_loop_on");
         } else {
-            publish_event(LABGUARD_RISK_WARNING, "manual_audio_on_failed", "audio_loop_error");
+            publish_audio_failure_event("manual_audio_on_failed", ret);
         }
         break;
+    }
     case LABGUARD_CMD_AUDIO_OFF:
+    {
+        const bool auto_alarm_was_active = s_auto_audio_loop_requested ||
+                                           actuator_ctrl_get_last_risk()->action_alarm;
+        s_manual_audio_loop_requested = false;
+        s_auto_audio_loop_requested = false;
+        s_auto_audio_muted_until_normal = auto_alarm_was_active;
         audio_prompt_stop_loop();
-        publish_event(LABGUARD_RISK_NORMAL, "manual_audio_off", "audio_loop_off");
+        publish_status();
+        publish_event(LABGUARD_RISK_NORMAL,
+                      "manual_audio_off",
+                      auto_alarm_was_active ? "audio_loop_off_auto_muted" : "audio_loop_off");
         break;
+    }
     case LABGUARD_CMD_LIGHT_ON:
         actuator_ctrl_set_light(true);
+        publish_status();
         publish_event(LABGUARD_RISK_NORMAL, "manual_light_on", "light_on");
         break;
     case LABGUARD_CMD_LIGHT_OFF:
         actuator_ctrl_set_light(false);
+        publish_status();
         publish_event(LABGUARD_RISK_NORMAL, "manual_light_off", "light_off");
         break;
     case LABGUARD_CMD_NONE:
@@ -461,9 +563,11 @@ static void device_task(void *arg)
 
         risk_fusion_evaluate(&sensor, &hazard, &risk);
         actuator_ctrl_apply_risk(&risk);
+        const labguard_risk_state_t *actual_risk = actuator_ctrl_get_last_risk();
+        sync_auto_audio_loop(actual_risk->action_alarm);
 
         publish_json(LABGUARD_TOPIC_DEVICE_SENSOR, labguard_sensor_data_to_json(&sensor));
-        publish_json(LABGUARD_TOPIC_DEVICE_RISK, labguard_risk_state_to_json(&risk));
+        publish_json(LABGUARD_TOPIC_DEVICE_RISK, labguard_risk_state_to_json(actual_risk));
 
         if (risk.risk_level != last_level) {
             publish_event(risk.risk_level,
@@ -518,6 +622,9 @@ void app_main(void)
     ESP_LOGI(TAG, "LabGuard device starting, version=%s", LABGUARD_VERSION);
 
     event_log_init(NULL);
+    s_manual_audio_loop_requested = false;
+    s_auto_audio_loop_requested = false;
+    s_auto_audio_muted_until_normal = false;
 
     labguard_net_config_t net_config = {
         .wifi_ssid = CONFIG_LABGUARD_WIFI_SSID,
@@ -529,6 +636,9 @@ void app_main(void)
     labguard_net_init(&net_config);
     labguard_net_start();
     init_sd_card();
+#if CONFIG_LABGUARD_ESPDL_PROBE_ENABLE && CONFIG_LABGUARD_ESPDL_PROBE_RUN_ON_BOOT
+    espdl_probe_run_once();
+#endif
     labguard_net_subscribe(LABGUARD_TOPIC_CMD_RESET, 1);
     labguard_net_subscribe(LABGUARD_TOPIC_CMD_TEST, 1);
     init_serial_commands();

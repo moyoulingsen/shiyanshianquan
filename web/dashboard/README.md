@@ -13,7 +13,7 @@ FRONTEND_FEATURES.md
 
 ## 一键启动（推荐）
 
-现在目录里已经提供了一键启动脚本，会自动完成下面两件事：
+现在目录里已经提供了一键启动脚本，会自动完成下面几件事：
 
 - 启动本地 MQTT broker
 - 启动本地串口桥，用于网页按钮直接控制 USB 连接的板子
@@ -24,6 +24,12 @@ FRONTEND_FEATURES.md
 ```bash
 cd /home/lijiaolong/labguard/shiyanshianquan/web/dashboard
 ./run_dashboard_stack.sh
+```
+
+如果只使用 `MQTT WebSocket`，或者还要用 `idf.py flash monitor` 烧录/查看串口日志，可以不启动串口桥，避免占用 `/dev/ttyACM0`：
+
+```bash
+ENABLE_SERIAL_BRIDGE=0 ./run_dashboard_stack.sh
 ```
 
 如果第一次运行时还没有安装依赖，脚本会自动执行 `npm install`。
@@ -62,6 +68,12 @@ http://172.20.10.14:5173
 8787 = 本地串口桥 WebSocket 端口，声音/灯光按钮默认走这里
 9001 = 浏览器连接的 MQTT WebSocket 端口
 1884 = ESP32-P4 固件连接的 MQTT TCP 端口
+```
+
+网页里选择 `MQTT WebSocket` 只会影响浏览器连接哪种数据源，不会停止后台脚本已经启动的串口桥。需要释放 USB 串口时，请用：
+
+```bash
+ENABLE_SERIAL_BRIDGE=0 ./run_dashboard_stack.sh
 ```
 
 如果端口被占用，可以启动前临时指定：

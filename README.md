@@ -21,6 +21,7 @@ cd /home/lijiaolong/labguard/shiyanshianquan
 
 - [web/dashboard](web/dashboard/)：电脑端监控网页
 - 本地 MQTT broker：单板和网页/手机共用
+- 本地串口桥：USB 串口调试用，默认会占用 `LABGUARD_PORT`
 - [mobile/LabGuard](mobile/LabGuard/)：Expo 手机 App 服务
 
 启动成功后终端会打印这些地址，照着填就行：
@@ -33,7 +34,13 @@ Dashboard: http://你的电脑IP:5173
 Expo: exp://你的电脑IP:8081
 ```
 
-脚本默认会先尝试释放这些常用端口（1884 / 9001 / 5173 / 8081），避免旧的 broker、Vite、Expo 进程占着不放。
+如果只使用 MQTT，或者还要用 `idf.py flash monitor` 烧录/看串口日志，可以不启动串口桥，避免占用 `/dev/ttyACM0`：
+
+```bash
+ENABLE_SERIAL_BRIDGE=0 ./run_labguard_stack.sh
+```
+
+脚本默认会先尝试释放这些常用端口（1884 / 9001 / 5173 / 8081），避免旧的 broker、Vite、Expo 进程占着不放。只有启用串口桥时才会释放串口桥 WebSocket 端口 8787。
 如果你不想自动强制清端口，可以这样启动：
 
 ```bash
@@ -47,6 +54,12 @@ FORCE_FREE_PORTS=0 ./run_labguard_stack.sh
 ```bash
 cd /home/lijiaolong/labguard/shiyanshianquan/web/dashboard
 ./run_dashboard_stack.sh
+```
+
+如果只想用 MQTT，不想让串口桥占用板子的 USB 串口：
+
+```bash
+ENABLE_SERIAL_BRIDGE=0 ./run_dashboard_stack.sh
 ```
 
 如果不想自动释放 1884 / 9001 / 5173 端口，可以这样运行：
@@ -247,4 +260,3 @@ ws://你的电脑IP:9001
 ```text
 ws://localhost:9001
 ```
-

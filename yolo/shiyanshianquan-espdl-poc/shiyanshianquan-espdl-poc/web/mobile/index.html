@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#17685f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="LabGuard" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <title>LabGuard Mobile</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <main class="phone-shell">
+      <header class="app-header">
+        <div class="brand-lockup">
+          <span class="brand-icon"><i data-lucide="smartphone"></i></span>
+          <div>
+            <h1>LabGuard</h1>
+            <p>Indoor Mobile</p>
+          </div>
+        </div>
+        <button id="connect-toggle" class="icon-button primary" type="button">
+          <i data-lucide="plug-zap"></i>
+          <span>连接</span>
+        </button>
+      </header>
+
+      <section class="connection-panel" aria-label="连接配置">
+        <label>
+          <span>MQTT WebSocket</span>
+          <input id="broker-url" autocomplete="off" inputmode="url" />
+        </label>
+        <div class="status-row">
+          <span id="connection-dot" class="dot warn"></span>
+          <span id="connection-text">未连接</span>
+          <span id="last-update" class="muted">--</span>
+        </div>
+      </section>
+
+      <section id="risk-card" class="risk-card risk-normal" aria-label="室内风险">
+        <div>
+          <span class="eyebrow">室内风险</span>
+          <strong id="risk-level">等待数据</strong>
+          <p id="risk-text">--</p>
+        </div>
+        <span class="risk-icon"><i data-lucide="shield-check"></i></span>
+      </section>
+
+      <nav class="tabs" aria-label="视图切换">
+        <button class="tab active" type="button" data-tab="monitor">
+          <i data-lucide="activity"></i>
+          <span>监控</span>
+        </button>
+        <button class="tab" type="button" data-tab="control">
+          <i data-lucide="sliders-horizontal"></i>
+          <span>控制</span>
+        </button>
+        <button class="tab" type="button" data-tab="logs">
+          <i data-lucide="radio-tower"></i>
+          <span>消息</span>
+        </button>
+      </nav>
+
+      <section id="panel-monitor" class="tab-panel active" aria-label="实时监控">
+        <div class="metric-grid">
+          <article class="metric-card">
+            <span><i data-lucide="thermometer"></i>温度</span>
+            <strong><span id="temperature">--</span><small>°C</small></strong>
+          </article>
+          <article class="metric-card">
+            <span><i data-lucide="droplets"></i>湿度</span>
+            <strong><span id="humidity">--</span><small>%RH</small></strong>
+          </article>
+          <article class="metric-card">
+            <span><i data-lucide="gauge"></i>VOC</span>
+            <strong><span id="voc">--</span><small>index</small></strong>
+          </article>
+          <article class="metric-card">
+            <span><i data-lucide="flame"></i>MQ-2</span>
+            <strong id="mq2">--</strong>
+          </article>
+        </div>
+
+        <section class="panel">
+          <div class="panel-title">
+            <h2>执行器</h2>
+            <span id="sensor-ok" class="badge">--</span>
+          </div>
+          <div class="actuator-grid">
+            <div class="actuator">
+              <i data-lucide="fan"></i>
+              <span>风扇</span>
+              <strong id="fan-state">--</strong>
+            </div>
+            <div class="actuator">
+              <i data-lucide="waves"></i>
+              <span>水泵</span>
+              <strong id="pump-state">--</strong>
+            </div>
+            <div class="actuator">
+              <i data-lucide="bell"></i>
+              <span>报警</span>
+              <strong id="alarm-state">--</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <h2>节点状态</h2>
+          </div>
+          <dl class="state-list">
+            <div>
+              <dt>运行时间</dt>
+              <dd id="uptime">--</dd>
+            </div>
+            <div>
+              <dt>Wi-Fi RSSI</dt>
+              <dd id="rssi">--</dd>
+            </div>
+            <div>
+              <dt>固件版本</dt>
+              <dd id="version">--</dd>
+            </div>
+          </dl>
+        </section>
+      </section>
+
+      <section id="panel-control" class="tab-panel" aria-label="演示控制">
+        <section class="panel">
+          <div class="panel-title">
+            <h2>风险演示</h2>
+            <span id="command-state" class="muted">等待连接</span>
+          </div>
+          <div class="command-grid">
+            <button type="button" data-command="reset">
+              <i data-lucide="rotate-ccw"></i>
+              <span>重置</span>
+            </button>
+            <button type="button" data-command="force_normal">
+              <i data-lucide="check-circle-2"></i>
+              <span>正常</span>
+            </button>
+            <button type="button" data-command="force_warning">
+              <i data-lucide="alert-triangle"></i>
+              <span>预警</span>
+            </button>
+            <button type="button" data-command="force_alarm">
+              <i data-lucide="siren"></i>
+              <span>报警</span>
+            </button>
+            <button type="button" data-command="force_emergency">
+              <i data-lucide="flame"></i>
+              <span>紧急</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <h2>手机端状态</h2>
+          </div>
+          <dl class="state-list">
+            <div>
+              <dt>客户端</dt>
+              <dd id="client-id">--</dd>
+            </div>
+            <div>
+              <dt>数据延迟</dt>
+              <dd id="stale-state">--</dd>
+            </div>
+            <div>
+              <dt>安装模式</dt>
+              <dd id="display-mode">浏览器</dd>
+            </div>
+          </dl>
+        </section>
+      </section>
+
+      <section id="panel-logs" class="tab-panel" aria-label="消息流">
+        <section class="panel log-panel">
+          <div class="panel-title">
+            <h2>消息流</h2>
+            <button id="clear-log" class="ghost-button" type="button">
+              <i data-lucide="trash-2"></i>
+              <span>清空</span>
+            </button>
+          </div>
+          <ol id="message-log"></ol>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
