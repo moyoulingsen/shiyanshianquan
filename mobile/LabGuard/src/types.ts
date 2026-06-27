@@ -27,6 +27,10 @@ export type ActuatorName = 'fan' | 'pump'
 export type ActuatorState = {
   on: boolean
   level: number
+  source: 'off' | 'auto' | 'manual' | 'mixed'
+  autoOn: boolean
+  manualOn: boolean
+  manualOverride: boolean
 }
 
 export type CameraFrame = {

@@ -24,6 +24,8 @@ cd /home/lijiaolong/labguard/shiyanshianquan
 - 本地串口桥：USB 串口调试用，默认会占用 `LABGUARD_PORT`
 - [mobile/LabGuard](mobile/LabGuard/)：Expo 手机 App 服务
 
+电脑端和手机端的控制能力已统一：`重置`、`声音`、`灯带`、`报警`、`风扇`、`水泵`。其中风扇和水泵都支持有效档位调节，并显示板子上报的最终 / 自动 / 手动状态。
+
 启动成功后终端会打印这些地址，照着填就行：
 
 ```text
@@ -32,6 +34,7 @@ Dashboard: http://你的电脑IP:5173
 手机 MQTT WS: ws://你的电脑IP:9001
 板子 MQTT: mqtt://你的电脑IP:1884
 Expo: exp://你的电脑IP:8081
+统一控制: 重置 / 声音 / 灯带 / 报警 / 风扇 / 水泵
 ```
 
 如果只使用 MQTT，或者还要用 `idf.py flash monitor` 烧录/看串口日志，可以不启动串口桥，避免占用 `/dev/ttyACM0`：
@@ -131,6 +134,19 @@ WEB_PORT=5175 MQTT_WS_PORT=9002 MQTT_TCP_PORT=1885 ./run_dashboard_stack.sh
 ```
 
 注意：`MQTT_TCP_PORT` 改了以后，板子的 `CONFIG_LABGUARD_MQTT_URI` 也要对应改。
+
+## 当前前端控制功能
+
+电脑端 Dashboard 和手机端 App 当前对同一块板提供一致控制：
+
+- `reset`：清除本地手动控制状态，并让板子关闭风扇、水泵、灯带、声音
+- `audio_on` / `audio_off`：控制声音循环提示
+- `light_on` / `light_off`：控制灯带
+- `alarm_on` / `alarm_off`：触发或关闭报警命令
+- `fan_on` / `fan_off`：控制风扇，开启时可带 `level_pct`
+- `pump_on` / `pump_off`：控制水泵，开启时可带 `level_pct`
+
+这些命令统一发布到 `labguard/cmd/test`，板子状态仍通过 `labguard/device/status` 和 `labguard/device/risk` 回传。
 
 ## 网页展示怎么打开
 

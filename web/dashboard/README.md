@@ -19,6 +19,8 @@ FRONTEND_FEATURES.md
 - 启动本地串口桥，用于网页按钮直接控制 USB 连接的板子
 - 启动 Dashboard 网页服务
 
+Dashboard 的控制能力与手机端一致：重置 / 声音 / 灯带 / 报警 / 风扇 / 水泵。风扇和水泵支持有效档位调节，并显示板子回传的最终 / 自动 / 手动状态。
+
 运行方式：
 
 ```bash
@@ -43,6 +45,7 @@ LabGuard Dashboard 已启动
 MQTT WS:   ws://你的电脑IP:9001
 板子 MQTT: mqtt://你的电脑IP:1884
 串口桥:   ws://localhost:8787 -> /dev/ttyACM0
+控制能力:  重置 / 声音 / 灯带 / 报警 / 风扇 / 水泵
 ```
 
 浏览器打开：
@@ -65,7 +68,7 @@ http://172.20.10.14:5173
 
 ```text
 5173 = Dashboard 网页地址
-8787 = 本地串口桥 WebSocket 端口，声音/灯光按钮默认走这里
+8787 = 本地串口桥 WebSocket 端口，网页控制按钮可走这里
 9001 = 浏览器连接的 MQTT WebSocket 端口
 1884 = ESP32-P4 固件连接的 MQTT TCP 端口
 ```

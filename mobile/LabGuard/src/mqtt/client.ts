@@ -28,6 +28,15 @@ const actuatorMinLevel: Record<ActuatorName, number> = {
   fan: 60,
   pump: 55
 }
+const actuatorCommandPendingUntil: Record<ActuatorName, number> = {
+  fan: 0,
+  pump: 0
+}
+const actuatorManualOverride: Record<ActuatorName, boolean> = {
+  fan: false,
+  pump: false
+}
+const actuatorPendingHoldMs = 3000
 const riskKeys: RiskKey[] = ['normal', 'warning', 'alarm', 'emergency']
 
 async function loadMqtt() {
@@ -76,6 +85,18 @@ function hasOwn(payload: Record<string, unknown>, key: string) {
   return Object.prototype.hasOwnProperty.call(payload, key)
 }
 
+function clearActuatorCommandPending(name: ActuatorName) {
+  actuatorCommandPendingUntil[name] = 0
+}
+
+function markActuatorCommandPending(name: ActuatorName) {
+  actuatorCommandPendingUntil[name] = Date.now() + actuatorPendingHoldMs
+}
+
+function commandPending(name: ActuatorName) {
+  return Date.now() < actuatorCommandPendingUntil[name]
+}
+
 function addLog(topic: string, payload: unknown) {
   useLabguardStore.getState().addLog({
     id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
@@ -108,6 +129,41 @@ function publishMobileEvent(event: string, actions = '') {
   })
 }
 
+function applyActuatorStateFromRisk(
+  name: ActuatorName,
+  nextOn: boolean,
+  nextLevel: number,
+  nextSource: 'off' | 'auto' | 'manual' | 'mixed',
+  autoOn: boolean,
+  manualOn: boolean,
+  manualOverride: boolean,
+  hasManualOverrideField: boolean
+) {
+  const store = useLabguardStore.getState()
+
+  if (hasManualOverrideField) {
+    actuatorManualOverride[name] = manualOverride
+    clearActuatorCommandPending(name)
+  }
+
+  if (commandPending(name) && !hasManualOverrideField) {
+    return
+  }
+
+  if (actuatorManualOverride[name] && !manualOverride && !hasManualOverrideField) {
+    return
+  }
+
+  store.setActuator(name, {
+    on: nextOn,
+    level: nextLevel,
+    source: nextSource,
+    autoOn,
+    manualOn,
+    manualOverride
+  })
+}
+
 function updateRisk(payload: Record<string, unknown>) {
   const store = useLabguardStore.getState()
   const { level: safeLevel, label } = normalizeRiskLevel(payload.risk_level)
@@ -115,12 +171,16 @@ function updateRisk(payload: Record<string, unknown>) {
   const fanOn = boolLabel(payload.action_fan ?? actions.includes('fan_on'))
   const pumpOn = boolLabel(payload.action_pump ?? actions.includes('pump_on'))
   const alarmOn = boolLabel(payload.action_alarm ?? actions.includes('alarm_on'))
+  const hasManualFanOverride = hasOwn(payload, 'manual_fan_override')
+  const hasManualPumpOverride = hasOwn(payload, 'manual_pump_override')
   const hasManualFan = hasOwn(payload, 'manual_fan')
   const hasManualPump = hasOwn(payload, 'manual_pump')
-  const manualFanOverride = hasOwn(payload, 'manual_fan_override') ? boolLabel(payload.manual_fan_override) : hasManualFan
-  const manualPumpOverride = hasOwn(payload, 'manual_pump_override') ? boolLabel(payload.manual_pump_override) : hasManualPump
-  const manualFanOn = boolLabel(payload.manual_fan)
-  const manualPumpOn = boolLabel(payload.manual_pump)
+  const manualFanOverride = hasManualFanOverride ? boolLabel(payload.manual_fan_override) : hasManualFan
+  const manualPumpOverride = hasManualPumpOverride ? boolLabel(payload.manual_pump_override) : hasManualPump
+  const manualFanOn = hasManualFan ? boolLabel(payload.manual_fan) : store.fan.on
+  const manualPumpOn = hasManualPump ? boolLabel(payload.manual_pump) : store.pump.on
+  const autoFan = boolLabel(payload.auto_fan ?? fanOn)
+  const autoPump = boolLabel(payload.auto_pump ?? pumpOn)
   const fanLevel = Number.isFinite(Number(payload.fan_level_pct)) ? Number(payload.fan_level_pct) : fanOn ? 100 : 0
   const pumpLevel = Number.isFinite(Number(payload.pump_level_pct)) ? Number(payload.pump_level_pct) : pumpOn ? 100 : 0
   const manualFanLevel = Number.isFinite(Number(payload.manual_fan_level_pct))
@@ -133,14 +193,34 @@ function updateRisk(payload: Record<string, unknown>) {
   const pumpButtonOn = manualPumpOverride ? manualPumpOn : pumpOn
   const fanButtonLevel = manualFanOverride ? manualFanLevel : fanLevel
   const pumpButtonLevel = manualPumpOverride ? manualPumpLevel : pumpLevel
+  const fanButtonSource = manualFanOverride ? (manualFanOn ? 'manual' : 'off') : fanOn ? 'auto' : 'off'
+  const pumpButtonSource = manualPumpOverride ? (manualPumpOn ? 'manual' : 'off') : pumpOn ? 'auto' : 'off'
 
   store.setRisk({
     level: safeLevel,
     label,
     text: riskDisplayText(safeLevel, payload.risk_text)
   })
-  store.setActuator('fan', { on: fanButtonOn, level: fanButtonLevel })
-  store.setActuator('pump', { on: pumpButtonOn, level: pumpButtonLevel })
+  applyActuatorStateFromRisk(
+    'fan',
+    fanButtonOn,
+    fanButtonLevel,
+    fanButtonSource,
+    autoFan,
+    manualFanOn,
+    manualFanOverride,
+    hasManualFanOverride
+  )
+  applyActuatorStateFromRisk(
+    'pump',
+    pumpButtonOn,
+    pumpButtonLevel,
+    pumpButtonSource,
+    autoPump,
+    manualPumpOn,
+    manualPumpOverride,
+    hasManualPumpOverride
+  )
   store.setAlarmOn(alarmOn)
 
   if (safeLevel >= 2 && safeLevel !== lastRiskLevel) {
@@ -191,6 +271,12 @@ export function handleMessage(topic: string, payload: Record<string, unknown>) {
       wifiRssi: Number.isFinite(Number(payload.wifi_rssi)) ? Number(payload.wifi_rssi) : undefined,
       version: typeof payload.version === 'string' ? payload.version : undefined
     })
+    if (hasOwn(payload, 'audio_looping')) {
+      store.setAudioOn(boolLabel(payload.audio_looping))
+    }
+    if (hasOwn(payload, 'light_on')) {
+      store.setLightOn(boolLabel(payload.light_on))
+    }
   }
 
   if (payload.type === 'camera_frame' || topic === TOPICS.camera) {
@@ -292,24 +378,42 @@ export function sendCommand(command: string, extra: Record<string, unknown> = {}
   return false
 }
 
+export function resetDevice() {
+  const store = useLabguardStore.getState()
+  if (sendCommand('reset')) {
+    actuatorManualOverride.fan = false
+    actuatorManualOverride.pump = false
+    clearActuatorCommandPending('fan')
+    clearActuatorCommandPending('pump')
+    store.resetLocalControlState()
+  }
+}
+
 export function toggleActuator(name: ActuatorName) {
   const store = useLabguardStore.getState()
   const current = store[name]
   const nextOn = !current.on
-  store.setActuator(name, { on: nextOn })
+  const nextSource = nextOn ? 'manual' : 'off'
+  actuatorManualOverride[name] = true
+  markActuatorCommandPending(name)
+  store.setActuator(name, { on: nextOn, source: nextSource, manualOn: nextOn, manualOverride: true })
 
   if (!sendCommand(`${name}_${nextOn ? 'on' : 'off'}`, nextOn ? { level_pct: current.level } : {})) {
-    store.setActuator(name, { on: current.on })
+    clearActuatorCommandPending(name)
+    actuatorManualOverride[name] = current.source === 'manual'
+    store.setActuator(name, current)
   }
 }
 
-export function updateActuatorLevel(name: ActuatorName, level: number, publish = false) {
+export function updateActuatorLevel(name: ActuatorName, level: number) {
   const safeLevel = Math.max(actuatorMinLevel[name], Math.min(100, Number(level) || actuatorMinLevel[name]))
   const store = useLabguardStore.getState()
   const current = store[name]
-  store.setActuator(name, { level: safeLevel })
+  store.setActuator(name, { level: safeLevel, source: current.on ? 'manual' : current.source })
 
-  if (publish && current.on) {
+  if (current.on) {
+    actuatorManualOverride[name] = true
+    markActuatorCommandPending(name)
     sendCommand(`${name}_on`, { level_pct: safeLevel })
   }
 }
@@ -320,6 +424,24 @@ export function toggleAlarm() {
   store.setAlarmOn(nextOn)
   if (!sendCommand(`alarm_${nextOn ? 'on' : 'off'}`)) {
     store.setAlarmOn(!nextOn)
+  }
+}
+
+export function toggleAudio() {
+  const store = useLabguardStore.getState()
+  const nextOn = !store.audioOn
+  store.setAudioOn(nextOn)
+  if (!sendCommand(`audio_${nextOn ? 'on' : 'off'}`)) {
+    store.setAudioOn(!nextOn)
+  }
+}
+
+export function toggleLight() {
+  const store = useLabguardStore.getState()
+  const nextOn = !store.lightOn
+  store.setLightOn(nextOn)
+  if (!sendCommand(`light_${nextOn ? 'on' : 'off'}`)) {
+    store.setLightOn(!nextOn)
   }
 }
 

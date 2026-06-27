@@ -1,4 +1,4 @@
-import { View, Text, Pressable, StyleSheet } from 'react-native'
+import { View, Text, Pressable, StyleSheet, type TextStyle } from 'react-native'
 
 import type { LogEntry } from '../types'
 
@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
   title: {
     color: '#162522',
     fontSize: 16,
-    fontWeight: '700'
+    fontWeight: '720' as unknown as TextStyle['fontWeight']
   },
   clearButton: {
     borderWidth: 1,
@@ -117,4 +117,3 @@ const styles = StyleSheet.create({
     lineHeight: 17
   }
 })
-

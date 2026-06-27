@@ -68,6 +68,7 @@ cat <<EOF
 LabGuard 手机端开发服务即将启动
 Expo 地址:  exp://${HOST_IP}:${EXPO_PORT}
 MQTT 地址:  ws://${HOST_IP}:${MQTT_WS_PORT}
+控制能力:  重置 / 声音 / 灯带 / 报警 / 风扇 / 水泵
 ========================================
 
 使用方法：
@@ -77,6 +78,7 @@ MQTT 地址:  ws://${HOST_IP}:${MQTT_WS_PORT}
 4. App 打开后，在顶部 MQTT 输入框填写：
    ws://${HOST_IP}:${MQTT_WS_PORT}
 5. 点击“连接”
+6. 连接后可直接控制重置、声音、灯带、报警、风扇和水泵
 
 如果扫码后打不开：
 - 确认电脑防火墙没有拦截 ${EXPO_PORT}

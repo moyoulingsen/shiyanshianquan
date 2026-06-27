@@ -107,6 +107,7 @@ Dashboard: http://localhost:${WEB_PORT}
 板子 MQTT: mqtt://${HOST_IP}:${MQTT_TCP_PORT}
 本地串口桥: $([ "$ENABLE_SERIAL_BRIDGE" = "1" ] && printf 'ws://localhost:%s -> %s' "$SERIAL_WS_PORT" "$LABGUARD_PORT" || printf '未启动')
 Expo: exp://${HOST_IP}:${EXPO_PORT}
+统一控制: 重置 / 声音 / 灯带 / 报警 / 风扇 / 水泵
 ========================================
 
 板子烧录前请在 menuconfig 中确认：
@@ -152,6 +153,7 @@ echo "  Dashboard: http://localhost:${WEB_PORT}"
 echo "  局域网 Dashboard: http://${HOST_IP}:${WEB_PORT}"
 echo "  手机 MQTT WS: ws://${HOST_IP}:${MQTT_WS_PORT}"
 echo "  板子 MQTT: mqtt://${HOST_IP}:${MQTT_TCP_PORT}"
+echo "  统一控制: 重置 / 声音 / 灯带 / 报警 / 风扇 / 水泵"
 if [ "$ENABLE_SERIAL_BRIDGE" = "1" ]; then
   echo "  本地串口桥: ws://localhost:${SERIAL_WS_PORT} -> ${LABGUARD_PORT}"
 else

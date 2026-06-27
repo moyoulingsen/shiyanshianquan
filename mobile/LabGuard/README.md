@@ -8,8 +8,9 @@
 - 风险卡片
 - 温度 / 湿度 / VOC / MQ-2 指标
 - 节点状态
-- 风扇 / 水泵 / 喇叭状态与控制
-- 风扇 / 水泵 0-100 滑杆调节
+- 与网页端一致的板子控制：重置 / 声音 / 灯带 / 报警 / 风扇 / 水泵
+- 风扇 / 水泵有效档位调节，风扇最低 60%，水泵最低 55%
+- 风扇 / 水泵最终 / 自动 / 手动接管状态显示
 - 摄像头 MQTT Base64 画面预览
 - 消息流日志
 - 风险等级震动提醒
@@ -63,6 +64,19 @@ ws://电脑IP:9001
 ```
 
 如果电脑 IP 改了，也可以在 App 顶部输入框手动改成新的地址。
+
+## 控制命令
+
+手机端与网页端统一通过 `labguard/cmd/test` 向单板发送命令：
+
+- `reset`
+- `audio_on` / `audio_off`
+- `light_on` / `light_off`
+- `alarm_on` / `alarm_off`
+- `fan_on` / `fan_off`
+- `pump_on` / `pump_off`
+
+风扇和水泵开启或调节档位时会携带 `level_pct`，并等待板子通过 `labguard/device/risk` 回传最终状态。声音和灯带状态通过 `labguard/device/status` 的 `audio_looping`、`light_on` 字段同步。
 
 ## 注意
 

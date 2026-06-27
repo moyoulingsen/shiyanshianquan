@@ -24,6 +24,8 @@ type LabguardStore = {
   fan: ActuatorState
   pump: ActuatorState
   alarmOn: boolean
+  audioOn: boolean
+  lightOn: boolean
   camera?: CameraFrame
   cameraStateText: string
   cameraStale: boolean
@@ -39,6 +41,9 @@ type LabguardStore = {
   setStatus: (status: Partial<StatusState>) => void
   setActuator: (name: ActuatorName, next: Partial<ActuatorState>) => void
   setAlarmOn: (value: boolean) => void
+  setAudioOn: (value: boolean) => void
+  setLightOn: (value: boolean) => void
+  resetLocalControlState: () => void
   setCamera: (frame: CameraFrame) => void
   setCameraState: (text: string, stale?: boolean) => void
   touchLastUpdate: (timeText: string) => void
@@ -60,9 +65,11 @@ export const useLabguardStore = create<LabguardStore>((set) => ({
     text: '--'
   },
   status: {},
-  fan: { on: false, level: 100 },
-  pump: { on: false, level: 100 },
+  fan: { on: false, level: 100, source: 'off', autoOn: false, manualOn: false, manualOverride: false },
+  pump: { on: false, level: 100, source: 'off', autoOn: false, manualOn: false, manualOverride: false },
   alarmOn: false,
+  audioOn: false,
+  lightOn: false,
   camera: undefined,
   cameraStateText: '等待画面',
   cameraStale: true,
@@ -82,10 +89,24 @@ export const useLabguardStore = create<LabguardStore>((set) => ({
       [name]: {
         ...state[name],
         ...next,
-        level: Math.max(0, Math.min(100, Number(next.level ?? state[name].level) || 0))
+        level: Math.max(0, Math.min(100, Number(next.level ?? state[name].level) || 0)),
+        source: next.source ?? state[name].source,
+        autoOn: next.autoOn ?? state[name].autoOn,
+        manualOn: next.manualOn ?? state[name].manualOn,
+        manualOverride: next.manualOverride ?? state[name].manualOverride
       }
     })),
   setAlarmOn: (alarmOn) => set({ alarmOn }),
+  setAudioOn: (audioOn) => set({ audioOn }),
+  setLightOn: (lightOn) => set({ lightOn }),
+  resetLocalControlState: () =>
+    set({
+      fan: { on: false, level: 100, source: 'off', autoOn: false, manualOn: false, manualOverride: false },
+      pump: { on: false, level: 100, source: 'off', autoOn: false, manualOn: false, manualOverride: false },
+      alarmOn: false,
+      audioOn: false,
+      lightOn: false
+    }),
   setCamera: (camera) => set({ camera, cameraStateText: '实时画面', cameraStale: false }),
   setCameraState: (cameraStateText, cameraStale = false) => set({ cameraStateText, cameraStale }),
   touchLastUpdate: (lastUpdateText) => set({ lastUpdateText, lastUpdateAt: Date.now(), staleStateText: '实时' }),

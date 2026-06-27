@@ -18,9 +18,17 @@ import { InfoPanel } from './src/components/InfoPanel'
 import { LogList } from './src/components/LogList'
 import { RiskCard } from './src/components/RiskCard'
 import { SensorCard } from './src/components/SensorCard'
-import { connectMqtt, disconnectMqtt, toggleAlarm } from './src/mqtt/client'
+import {
+  connectMqtt,
+  disconnectMqtt,
+  resetDevice,
+  toggleAlarm,
+  toggleAudio,
+  toggleLight
+} from './src/mqtt/client'
 import { useLabguardStore } from './src/state/labguardStore'
 import { formatNumber, formatUptime } from './src/utils/format'
+import type { ActuatorState } from './src/types'
 
 declare const process: {
   env?: {
@@ -40,6 +48,15 @@ function riskDisplayText(text: string, label: string) {
   return text
 }
 
+function boolText(value: boolean) {
+  return value ? '开启' : '关闭'
+}
+
+function actuatorRowValue(state: ActuatorState) {
+  const manual = state.manualOverride ? boolText(state.manualOn) : '未接管'
+  return `最终${boolText(state.on)} / 自动${boolText(state.autoOn)} / 手动${manual}`
+}
+
 export default function App() {
   const brokerUrl = useLabguardStore((state) => state.brokerUrl)
   const setBrokerUrl = useLabguardStore((state) => state.setBrokerUrl)
@@ -53,6 +70,8 @@ export default function App() {
   const fan = useLabguardStore((state) => state.fan)
   const pump = useLabguardStore((state) => state.pump)
   const alarmOn = useLabguardStore((state) => state.alarmOn)
+  const audioOn = useLabguardStore((state) => state.audioOn)
+  const lightOn = useLabguardStore((state) => state.lightOn)
   const camera = useLabguardStore((state) => state.camera)
   const cameraStateText = useLabguardStore((state) => state.cameraStateText)
   const cameraStale = useLabguardStore((state) => state.cameraStale)
@@ -118,9 +137,11 @@ export default function App() {
   }, [])
 
   const actuatorRows = [
-    { label: '风扇', value: `${fan.on ? '开启' : '关闭'} / ${fan.level}%` },
-    { label: '水泵', value: `${pump.on ? '开启' : '关闭'} / ${pump.level}%` },
-    { label: '报警', value: alarmOn ? '开启' : '关闭' },
+    { label: '风扇', value: actuatorRowValue(fan) },
+    { label: '水泵', value: actuatorRowValue(pump) },
+    { label: '报警', value: boolText(alarmOn) },
+    { label: '声音', value: boolText(audioOn) },
+    { label: '灯带', value: boolText(lightOn) },
     { label: '发送状态', value: commandStateText }
   ]
 
@@ -170,22 +191,33 @@ export default function App() {
           <View style={styles.panel}>
             <View style={styles.panelHeader}>
               <View style={styles.panelHeaderText}>
-                <Text style={styles.panelTitle}>执行器控制</Text>
-                <Text style={styles.panelDesc}>通过按钮与滑杆调节风扇和水泵输出。</Text>
+                <Text style={styles.panelTitle}>演示控制</Text>
+                <Text style={styles.panelDesc}>通过 MQTT 向板子发送与网页端一致的控制命令。</Text>
               </View>
-              <View style={[styles.alarmBadge, alarmOn ? styles.alarmBadgeOn : styles.alarmBadgeOff]}>
-                <Text style={styles.alarmBadgeText}>{alarmOn ? '报警开启' : '报警关闭'}</Text>
+              <View style={[styles.statusBadge, alarmOn ? styles.statusBadgeOn : styles.statusBadgeOff]}>
+                <Text style={styles.statusBadgeText}>{alarmOn ? '报警开启' : '报警关闭'}</Text>
               </View>
+            </View>
+
+            <View style={styles.commandGrid}>
+              <Pressable style={[styles.commandButton, styles.resetButton]} onPress={resetDevice}>
+                <Text style={styles.commandButtonText}>重置</Text>
+              </Pressable>
+              <Pressable style={[styles.commandButton, audioOn ? styles.commandButtonOn : styles.commandButtonOff]} onPress={toggleAudio}>
+                <Text style={styles.commandButtonText}>声音：{audioOn ? '开启' : '关闭'}</Text>
+              </Pressable>
+              <Pressable style={[styles.commandButton, lightOn ? styles.commandButtonOn : styles.commandButtonOff]} onPress={toggleLight}>
+                <Text style={styles.commandButtonText}>灯带：{lightOn ? '开启' : '关闭'}</Text>
+              </Pressable>
+              <Pressable style={[styles.commandButton, alarmOn ? styles.commandButtonOn : styles.commandButtonOff]} onPress={toggleAlarm}>
+                <Text style={styles.commandButtonText}>报警：{alarmOn ? '开启' : '关闭'}</Text>
+              </Pressable>
             </View>
 
             <View style={styles.controlColumn}>
               <ActuatorControl name="fan" title="风扇" state={fan} />
               <ActuatorControl name="pump" title="水泵" state={pump} />
             </View>
-
-            <Pressable style={[styles.alarmToggleButton, alarmOn ? styles.alarmToggleButtonOn : styles.alarmToggleButtonOff]} onPress={toggleAlarm}>
-              <Text style={styles.alarmToggleButtonText}>{alarmOn ? '关闭报警' : '开启报警'}</Text>
-            </Pressable>
           </View>
 
           <InfoPanel title="节点状态" rows={nodeRows} />
@@ -312,36 +344,45 @@ const styles = StyleSheet.create({
   controlColumn: {
     gap: 10
   },
-  alarmBadge: {
+  statusBadge: {
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 6
   },
-  alarmBadgeOn: {
+  statusBadgeOn: {
     backgroundColor: '#ffe9e4'
   },
-  alarmBadgeOff: {
+  statusBadgeOff: {
     backgroundColor: '#edf2f0'
   },
-  alarmBadgeText: {
+  statusBadgeText: {
     color: '#36514b',
     fontSize: 12,
     fontWeight: '700'
   },
-  alarmToggleButton: {
-    minHeight: 46,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12
+  commandGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10
   },
-  alarmToggleButtonOn: {
+  commandButton: {
+    minHeight: 42,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    minWidth: 104,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  commandButtonOn: {
+    backgroundColor: '#168257'
+  },
+  commandButtonOff: {
     backgroundColor: '#b53d33'
   },
-  alarmToggleButtonOff: {
-    backgroundColor: '#17685f'
+  resetButton: {
+    backgroundColor: '#52606d'
   },
-  alarmToggleButtonText: {
+  commandButtonText: {
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '800'

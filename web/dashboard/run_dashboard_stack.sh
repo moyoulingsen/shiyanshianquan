@@ -147,10 +147,11 @@ else
 fi
 echo "MQTT WS:   ws://${HOST_IP}:${MQTT_WS_PORT}"
 echo "板子 MQTT: mqtt://${HOST_IP}:${MQTT_TCP_PORT}"
+echo "控制能力:  重置 / 声音 / 灯带 / 报警 / 风扇 / 水泵"
 echo "========================================"
 echo ""
 if [ "$ENABLE_SERIAL_BRIDGE" = "1" ]; then
-  echo "网页可使用本地串口桥，声音/灯光按钮可通过 ${LABGUARD_PORT} 发到板子。"
+  echo "网页可使用本地串口桥，控制按钮可通过 ${LABGUARD_PORT} 发到板子。"
 else
   echo "当前未启动本地串口桥，网页请使用 MQTT WebSocket。"
 fi

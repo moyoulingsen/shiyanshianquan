@@ -9,7 +9,7 @@
 - 传感器状态查看
 - 风险状态查看
 - 摄像头预览帧显示
-- 风扇 / 水泵 / 报警控制
+- 重置 / 声音 / 灯带 / 报警 / 风扇 / 水泵控制
 - MQTT 消息流查看
 
 不再承担旧的演示场景切换与双板 indoor/outdoor 展示职责。
@@ -38,6 +38,8 @@ labguard/event
 Dashboard 当前保留这些控制能力：
 
 - `reset`
+- `audio_on` / `audio_off`
+- `light_on` / `light_off`
 - `fan_on` / `fan_off`
 - `pump_on` / `pump_off`
 - `alarm_on` / `alarm_off`
@@ -49,7 +51,7 @@ Dashboard 当前保留这些控制能力：
 - 传感器卡片：温度、湿度、VOC、MQ-2
 - 风险卡片：当前风险等级与说明
 - 摄像头面板：MQTT Base64 预览帧
-- 执行器控制：风扇 / 水泵 / 报警
+- 演示控制：重置 / 声音 / 灯带 / 报警 / 风扇 / 水泵
 - 消息流：最近收到的原始消息
 
 ## 6. 运行方式

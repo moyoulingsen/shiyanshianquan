@@ -1,4 +1,4 @@
-import { View, Text, Pressable, StyleSheet } from 'react-native'
+import { View, Text, Pressable, StyleSheet, type TextStyle } from 'react-native'
 import Slider from '@react-native-community/slider'
 
 import type { ActuatorName, ActuatorState } from '../types'
@@ -15,6 +15,13 @@ type Props = {
   state: ActuatorState
 }
 
+function sourceText(source: ActuatorState['source']) {
+  if (source === 'manual') return '手动'
+  if (source === 'auto') return '自动'
+  if (source === 'mixed') return '手动+自动'
+  return '关闭'
+}
+
 export function ActuatorControl({ name, title, state }: Props) {
   const minLevel = actuatorMinLevel[name]
   const displayLevel = Math.max(minLevel, state.level)
@@ -24,37 +31,42 @@ export function ActuatorControl({ name, title, state }: Props) {
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>有效档位 {displayLevel}%</Text>
+          <Text style={styles.subtitle}>
+            {state.on ? `${sourceText(state.source)} / 有效档位 ${displayLevel}%` : sourceText(state.source)}
+          </Text>
         </View>
         <Pressable
           style={[styles.toggle, state.on ? styles.toggleOn : styles.toggleOff]}
           onPress={() => toggleActuator(name)}
         >
-          <Text style={styles.toggleText}>{state.on ? '开启' : '关闭'}</Text>
+          <Text style={styles.toggleText}>{title}：{state.on ? '开启' : '关闭'}</Text>
         </Pressable>
       </View>
-      <View style={styles.sliderRow}>
-        <Pressable style={styles.stepButton} onPress={() => updateActuatorLevel(name, state.level - 5, state.on)}>
-          <Text style={styles.stepText}>−</Text>
-        </Pressable>
-        <View style={styles.levelWrap}>
-          <Slider
-            style={styles.slider}
-            minimumValue={minLevel}
-            maximumValue={100}
-            step={1}
-            value={displayLevel}
-            minimumTrackTintColor="#17685f"
-            maximumTrackTintColor="#ccd7d3"
-            thumbTintColor="#17685f"
-            onSlidingComplete={(value) => updateActuatorLevel(name, value, state.on)}
-          />
-          <Text style={styles.levelText}>{displayLevel}%</Text>
+      {state.on ? (
+        <View style={styles.sliderPanel}>
+          <Text style={styles.sliderLabel}>{title}有效档位</Text>
+          <View style={styles.sliderRow}>
+            <Pressable style={styles.stepButton} onPress={() => updateActuatorLevel(name, state.level - 1)}>
+              <Text style={styles.stepText}>−</Text>
+            </Pressable>
+            <Slider
+              style={styles.slider}
+              minimumValue={minLevel}
+              maximumValue={100}
+              step={1}
+              value={displayLevel}
+              minimumTrackTintColor="#17685f"
+              maximumTrackTintColor="#ccd7d3"
+              thumbTintColor="#17685f"
+              onValueChange={(value) => updateActuatorLevel(name, value)}
+            />
+            <Pressable style={styles.stepButton} onPress={() => updateActuatorLevel(name, state.level + 1)}>
+              <Text style={styles.stepText}>+</Text>
+            </Pressable>
+            <Text style={styles.levelText}>{displayLevel}%</Text>
+          </View>
         </View>
-        <Pressable style={styles.stepButton} onPress={() => updateActuatorLevel(name, state.level + 5, state.on)}>
-          <Text style={styles.stepText}>+</Text>
-        </Pressable>
-      </View>
+      ) : null}
     </View>
   )
 }
@@ -77,7 +89,7 @@ const styles = StyleSheet.create({
   title: {
     color: '#162522',
     fontSize: 16,
-    fontWeight: '700'
+    fontWeight: '720' as unknown as TextStyle['fontWeight']
   },
   subtitle: {
     marginTop: 3,
@@ -86,8 +98,9 @@ const styles = StyleSheet.create({
   },
   toggle: {
     borderRadius: 999,
-    minWidth: 68,
+    minWidth: 96,
     minHeight: 36,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center'
   },
@@ -102,21 +115,31 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800'
   },
+  sliderPanel: {
+    borderWidth: 1,
+    borderColor: '#d4dfdc',
+    borderRadius: 10,
+    backgroundColor: '#f8fafc',
+    padding: 10,
+    gap: 8
+  },
+  sliderLabel: {
+    color: '#64736f',
+    fontSize: 12,
+    fontWeight: '700'
+  },
   sliderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8
   },
-  levelWrap: {
-    flex: 1,
-    gap: 8,
-    alignItems: 'stretch'
-  },
   slider: {
+    flex: 1,
     height: 36
   },
   levelText: {
-    textAlign: 'center',
+    minWidth: 46,
+    textAlign: 'right',
     color: '#36514b',
     fontSize: 13,
     fontWeight: '700'
