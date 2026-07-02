@@ -26,6 +26,7 @@ type LabguardStore = {
   alarmOn: boolean
   audioOn: boolean
   lightOn: boolean
+  masterOn: boolean
   camera?: CameraFrame
   cameraStateText: string
   cameraStale: boolean
@@ -43,6 +44,7 @@ type LabguardStore = {
   setAlarmOn: (value: boolean) => void
   setAudioOn: (value: boolean) => void
   setLightOn: (value: boolean) => void
+  setMasterOn: (value: boolean) => void
   resetLocalControlState: () => void
   setCamera: (frame: CameraFrame) => void
   setCameraState: (text: string, stale?: boolean) => void
@@ -70,6 +72,7 @@ export const useLabguardStore = create<LabguardStore>((set) => ({
   alarmOn: false,
   audioOn: false,
   lightOn: false,
+  masterOn: false,
   camera: undefined,
   cameraStateText: '等待画面',
   cameraStale: true,
@@ -99,13 +102,15 @@ export const useLabguardStore = create<LabguardStore>((set) => ({
   setAlarmOn: (alarmOn) => set({ alarmOn }),
   setAudioOn: (audioOn) => set({ audioOn }),
   setLightOn: (lightOn) => set({ lightOn }),
+  setMasterOn: (masterOn) => set({ masterOn }),
   resetLocalControlState: () =>
     set({
       fan: { on: false, level: 100, source: 'off', autoOn: false, manualOn: false, manualOverride: false },
       pump: { on: false, level: 100, source: 'off', autoOn: false, manualOn: false, manualOverride: false },
       alarmOn: false,
       audioOn: false,
-      lightOn: false
+      lightOn: false,
+      masterOn: false
     }),
   setCamera: (camera) => set({ camera, cameraStateText: '实时画面', cameraStale: false }),
   setCameraState: (cameraStateText, cameraStale = false) => set({ cameraStateText, cameraStale }),

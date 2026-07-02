@@ -50,6 +50,8 @@ typedef enum {
     LABGUARD_CMD_AUDIO_OFF,
     LABGUARD_CMD_LIGHT_ON,
     LABGUARD_CMD_LIGHT_OFF,
+    LABGUARD_CMD_MASTER_ON,
+    LABGUARD_CMD_MASTER_OFF,
 } labguard_command_type_t;
 
 typedef struct {
@@ -59,7 +61,10 @@ typedef struct {
     float temperature_raw_c;
     float humidity_raw_rh;
     int voc_raw_index;
+    int mq2_raw_adc;
+    int mq2_raw_mv;
     bool mq2_alarm;
+    bool mq2_analog_valid;
     bool sensor_ok;
     bool filtered;
     int64_t timestamp;

@@ -5,6 +5,7 @@
 
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
+#include "esp_adc/adc_oneshot.h"
 #include "esp_check.h"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -21,6 +22,7 @@ static const char *TAG = "sensor_reader";
 #endif
 
 #define SENSOR_I2C_TIMEOUT_MS 100
+#define MQ2_ADC_MAX_MV 3300
 
 #define SHT3X_ADDR_DEFAULT CONFIG_LABGUARD_SHT3X_ADDR
 #define SHT3X_CMD_SOFT_RESET 0x30A2
@@ -43,7 +45,10 @@ typedef struct {
     uint8_t ens_aqi;
     uint16_t ens_tvoc_ppb;
     uint16_t ens_eco2_ppm;
+    int mq2_raw_adc;
+    int mq2_raw_mv;
     bool mq2_alarm;
+    bool mq2_analog_valid;
 } physical_sensor_sample_t;
 
 static uint32_t s_cycle;
@@ -54,6 +59,10 @@ static bool s_i2c_ready;
 static bool s_sht_ready;
 static bool s_ens_ready;
 static bool s_mq2_ready;
+static bool s_mq2_adc_ready;
+#if CONFIG_LABGUARD_MQ2_ANALOG_ENABLE
+static adc_oneshot_unit_handle_t s_mq2_adc_unit;
+#endif
 static physical_sensor_sample_t s_last_sample;
 static bool s_last_sample_valid;
 
@@ -278,6 +287,56 @@ static int ens160_to_voc_index(uint8_t aqi, uint16_t tvoc_ppb)
     return tvoc_index > aqi_index ? tvoc_index : aqi_index;
 }
 
+#if CONFIG_LABGUARD_MQ2_ANALOG_ENABLE
+static adc_channel_t mq2_gpio_to_adc_channel(int gpio)
+{
+    switch (gpio) {
+    case 11:
+        return ADC_CHANNEL_0;
+    case 12:
+        return ADC_CHANNEL_1;
+    case 13:
+        return ADC_CHANNEL_2;
+    case 14:
+        return ADC_CHANNEL_3;
+    case 15:
+        return ADC_CHANNEL_4;
+    case 16:
+        return ADC_CHANNEL_5;
+    case 17:
+        return ADC_CHANNEL_6;
+    default:
+        return ADC_CHANNEL_MAX;
+    }
+}
+
+static esp_err_t read_mq2_analog(int *raw_adc, int *raw_mv)
+{
+    if (!s_mq2_adc_ready || raw_adc == NULL || raw_mv == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    adc_channel_t channel = mq2_gpio_to_adc_channel(CONFIG_LABGUARD_MQ2_AO_GPIO);
+    if (channel == ADC_CHANNEL_MAX) {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+
+    int total = 0;
+    for (int i = 0; i < CONFIG_LABGUARD_MQ2_ADC_SAMPLES; i++) {
+        int sample = 0;
+        esp_err_t ret = adc_oneshot_read(s_mq2_adc_unit, channel, &sample);
+        if (ret != ESP_OK) {
+            return ret;
+        }
+        total += sample;
+    }
+
+    *raw_adc = total / CONFIG_LABGUARD_MQ2_ADC_SAMPLES;
+    *raw_mv = (*raw_adc * MQ2_ADC_MAX_MV) / 4095;
+    return ESP_OK;
+}
+#endif
+
 static void fill_default(labguard_sensor_data_t *out)
 {
     out->temperature_c = 25.8f;
@@ -286,7 +345,10 @@ static void fill_default(labguard_sensor_data_t *out)
     out->temperature_raw_c = out->temperature_c;
     out->humidity_raw_rh = out->humidity_rh;
     out->voc_raw_index = out->voc_index;
+    out->mq2_raw_adc = 0;
+    out->mq2_raw_mv = 0;
     out->mq2_alarm = false;
+    out->mq2_analog_valid = false;
     out->sensor_ok = false;
     out->filtered = false;
     out->timestamp = esp_timer_get_time() / 1000000;
@@ -304,6 +366,16 @@ static bool read_mq2_alarm(void)
 #else
     return false;
 #endif
+}
+
+static bool derive_mq2_alarm(int mq2_raw_mv, bool digital_alarm)
+{
+#if CONFIG_LABGUARD_MQ2_ANALOG_ENABLE
+    if (mq2_raw_mv > 0) {
+        return mq2_raw_mv >= CONFIG_LABGUARD_MQ2_ALARM_THRESHOLD_MV;
+    }
+#endif
+    return digital_alarm;
 }
 
 static esp_err_t read_physical_sample(physical_sensor_sample_t *sample)
@@ -354,6 +426,15 @@ static esp_err_t read_physical_sample(physical_sensor_sample_t *sample)
     }
 
     sample->mq2_alarm = read_mq2_alarm();
+#if CONFIG_LABGUARD_MQ2_ANALOG_ENABLE
+    sample->mq2_raw_adc = 0;
+    sample->mq2_raw_mv = 0;
+    sample->mq2_analog_valid = false;
+    if (read_mq2_analog(&sample->mq2_raw_adc, &sample->mq2_raw_mv) == ESP_OK) {
+        sample->mq2_analog_valid = true;
+    }
+#endif
+    sample->mq2_alarm = derive_mq2_alarm(sample->mq2_raw_mv, sample->mq2_alarm);
 
     if (sht_ok || ens_ok) {
         s_last_sample = *sample;
@@ -370,6 +451,7 @@ esp_err_t sensor_reader_init(void)
     s_sht_ready = false;
     s_ens_ready = false;
     s_mq2_ready = false;
+    s_mq2_adc_ready = false;
     s_last_sample_valid = false;
     reset_filters();
 
@@ -430,6 +512,35 @@ esp_err_t sensor_reader_init(void)
              MQ2_ACTIVE_LOW ? "low" : "high");
 #endif
 
+#if CONFIG_LABGUARD_MQ2_ANALOG_ENABLE
+    adc_oneshot_unit_init_cfg_t adc_cfg = {
+        .unit_id = ADC_UNIT_1,
+        .ulp_mode = ADC_ULP_MODE_DISABLE,
+    };
+    ESP_RETURN_ON_ERROR(adc_oneshot_new_unit(&adc_cfg, &s_mq2_adc_unit), TAG, "MQ-2 ADC unit init failed");
+
+    adc_channel_t mq2_channel = mq2_gpio_to_adc_channel(CONFIG_LABGUARD_MQ2_AO_GPIO);
+    if (mq2_channel == ADC_CHANNEL_MAX) {
+        ESP_LOGE(TAG, "MQ-2 AO GPIO%d is not mapped to a supported ADC channel", CONFIG_LABGUARD_MQ2_AO_GPIO);
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+
+    adc_oneshot_chan_cfg_t chan_cfg = {
+        .atten = ADC_ATTEN_DB_12,
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+    };
+    ESP_RETURN_ON_ERROR(adc_oneshot_config_channel(s_mq2_adc_unit, mq2_channel, &chan_cfg),
+                        TAG,
+                        "MQ-2 ADC channel config failed");
+    s_mq2_adc_ready = true;
+    ESP_LOGI(TAG,
+             "MQ-2 AO initialized GPIO%d channel=%d threshold=%dmV samples=%d",
+             CONFIG_LABGUARD_MQ2_AO_GPIO,
+             mq2_channel,
+             CONFIG_LABGUARD_MQ2_ALARM_THRESHOLD_MV,
+             CONFIG_LABGUARD_MQ2_ADC_SAMPLES);
+#endif
+
     return ESP_OK;
 }
 
@@ -452,7 +563,10 @@ esp_err_t sensor_reader_read(labguard_sensor_data_t *out)
     out->temperature_c = sample.temperature_c;
     out->humidity_rh = sample.humidity_rh;
     out->voc_index = ens160_to_voc_index(sample.ens_aqi, sample.ens_tvoc_ppb);
+    out->mq2_raw_adc = sample.mq2_raw_adc;
+    out->mq2_raw_mv = sample.mq2_raw_mv;
     out->mq2_alarm = sample.mq2_alarm;
+    out->mq2_analog_valid = sample.mq2_analog_valid;
     out->sensor_ok = ret == ESP_OK;
 
     out->temperature_raw_c = out->temperature_c;

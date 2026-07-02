@@ -25,11 +25,71 @@
 
 static const char *TAG = "indoor_camera";
 static bool s_ready;
+static bool s_first_frame_received;
+static esp_err_t s_last_error;
+static indoor_camera_state_t s_state = INDOOR_CAMERA_STATE_IDLE;
 static portMUX_TYPE s_frame_lock = portMUX_INITIALIZER_UNLOCKED;
 static indoor_camera_frame_t s_latest_frame;
 
+static const char *state_to_string(indoor_camera_state_t state)
+{
+    switch (state) {
+    case INDOOR_CAMERA_STATE_IDLE:
+        return "idle";
+    case INDOOR_CAMERA_STATE_INIT_MIPI_LDO:
+        return "init_mipi_ldo";
+    case INDOOR_CAMERA_STATE_INIT_DSI_PANEL:
+        return "init_dsi_panel";
+    case INDOOR_CAMERA_STATE_INIT_SCCB:
+        return "init_sccb";
+    case INDOOR_CAMERA_STATE_DETECT_SENSOR:
+        return "detect_sensor";
+    case INDOOR_CAMERA_STATE_INIT_CSI_ISP:
+        return "init_csi_isp";
+    case INDOOR_CAMERA_STATE_RESET_PANEL:
+        return "reset_panel";
+    case INDOOR_CAMERA_STATE_START_CSI:
+        return "start_csi";
+    case INDOOR_CAMERA_STATE_INIT_PANEL:
+        return "init_panel";
+    case INDOOR_CAMERA_STATE_ENABLE_BACKLIGHT:
+        return "enable_backlight";
+    case INDOOR_CAMERA_STATE_START_TASK:
+        return "start_task";
+    case INDOOR_CAMERA_STATE_WAITING_FIRST_FRAME:
+        return "waiting_first_frame";
+    case INDOOR_CAMERA_STATE_STREAMING:
+        return "streaming";
+    case INDOOR_CAMERA_STATE_INIT_FAILED:
+        return "init_failed";
+    default:
+        return "unknown";
+    }
+}
+
+static void set_state(indoor_camera_state_t state)
+{
+    s_state = state;
+    ESP_LOGI(TAG, "camera pipeline state -> %s", state_to_string(state));
+}
+
+static esp_err_t record_failure(esp_err_t err, indoor_camera_state_t failed_state, const char *message)
+{
+    s_last_error = err;
+    s_state = INDOOR_CAMERA_STATE_INIT_FAILED;
+    ESP_LOGE(TAG, "%s: %s (failed_stage=%s)",
+             message,
+             esp_err_to_name(err),
+             state_to_string(failed_state));
+    return err;
+}
+
 #define LCD_BACKLIGHT_GPIO       GPIO_NUM_26
 #define LCD_BACKLIGHT_ON_LEVEL   1
+#define LCD_RESET_GPIO           GPIO_NUM_27
+
+// Official ESP32-P4 HMI + SC2336 mapping: keep BL=GPIO26, LCD_RST=GPIO27.
+// Do not use GPIO54 for LCD reset on this setup.
 
 // MIPI PHY LDO channel/voltage as used by the official mipi_isp_dsi example.
 #define MIPI_PHY_LDO_CHAN_ID     3
@@ -87,7 +147,12 @@ static bool IRAM_ATTR on_camera_trans_finished(esp_cam_ctlr_handle_t handle,
     s_latest_frame.height = DSI_V_RES;
     s_latest_frame.pixel_format = INDOOR_CAMERA_PIXEL_FORMAT_RGB565;
     s_latest_frame.sequence++;
+    s_first_frame_received = true;
     portEXIT_CRITICAL_ISR(&s_frame_lock);
+
+    if (s_state == INDOOR_CAMERA_STATE_WAITING_FIRST_FRAME) {
+        s_state = INDOOR_CAMERA_STATE_STREAMING;
+    }
     return false;
 }
 
@@ -158,7 +223,7 @@ static esp_err_t init_dsi_panel(esp_lcd_panel_handle_t *out_panel, void **out_fb
         },
     };
     esp_lcd_panel_dev_config_t panel_cfg = {
-        .reset_gpio_num = -1,
+        .reset_gpio_num = LCD_RESET_GPIO,
         .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB,
         .bits_per_pixel = 16,
         .vendor_config = &vendor_cfg,
@@ -313,33 +378,89 @@ static void camera_capture_task(void *arg)
 
 esp_err_t indoor_camera_capture_init(void)
 {
-    ESP_RETURN_ON_ERROR(init_backlight(), TAG, "backlight init failed");
-    ESP_RETURN_ON_ERROR(init_mipi_ldo(), TAG, "MIPI PHY LDO acquire failed");
+    s_ready = false;
+    s_first_frame_received = false;
+    s_last_error = ESP_OK;
+    s_state = INDOOR_CAMERA_STATE_IDLE;
+    memset(&s_latest_frame, 0, sizeof(s_latest_frame));
+
+    ESP_LOGI(TAG,
+             "initializing official ESP32-P4 HMI + SC2336 pipeline (BL=GPIO%d, LCD_RST=GPIO%d, SCCB SDA=GPIO%d, SCL=GPIO%d)",
+             LCD_BACKLIGHT_GPIO,
+             LCD_RESET_GPIO,
+             CSI_SCCB_SDA_GPIO,
+             CSI_SCCB_SCL_GPIO);
+
+    set_state(INDOOR_CAMERA_STATE_INIT_MIPI_LDO);
+    esp_err_t ret = init_mipi_ldo();
+    if (ret != ESP_OK) {
+        return record_failure(ret, INDOOR_CAMERA_STATE_INIT_MIPI_LDO, "MIPI PHY LDO acquire failed");
+    }
 
     esp_lcd_panel_handle_t dpi_panel = NULL;
     void *frame_buffer = NULL;
-    ESP_RETURN_ON_ERROR(init_dsi_panel(&dpi_panel, &frame_buffer), TAG, "DSI panel init failed");
+    set_state(INDOOR_CAMERA_STATE_INIT_DSI_PANEL);
+    ret = init_dsi_panel(&dpi_panel, &frame_buffer);
+    if (ret != ESP_OK) {
+        return record_failure(ret, INDOOR_CAMERA_STATE_INIT_DSI_PANEL, "DSI panel init failed");
+    }
 
-    ESP_RETURN_ON_ERROR(init_camera_sccb_bus(), TAG, "camera SCCB bus init failed");
-    ESP_RETURN_ON_ERROR(configure_sc2336_on_sccb_bus(), TAG, "SC2336 configuration failed");
-    ESP_RETURN_ON_ERROR(init_csi_and_isp(frame_buffer), TAG, "CSI/ISP init failed");
+    set_state(INDOOR_CAMERA_STATE_INIT_SCCB);
+    ret = init_camera_sccb_bus();
+    if (ret != ESP_OK) {
+        return record_failure(ret, INDOOR_CAMERA_STATE_INIT_SCCB, "camera SCCB bus init failed");
+    }
+
+    set_state(INDOOR_CAMERA_STATE_DETECT_SENSOR);
+    ret = configure_sc2336_on_sccb_bus();
+    if (ret != ESP_OK) {
+        return record_failure(ret, INDOOR_CAMERA_STATE_DETECT_SENSOR, "SC2336 configuration failed");
+    }
+
+    set_state(INDOOR_CAMERA_STATE_INIT_CSI_ISP);
+    ret = init_csi_and_isp(frame_buffer);
+    if (ret != ESP_OK) {
+        return record_failure(ret, INDOOR_CAMERA_STATE_INIT_CSI_ISP, "CSI/ISP init failed");
+    }
+
+    set_state(INDOOR_CAMERA_STATE_RESET_PANEL);
+    ret = esp_lcd_panel_reset(dpi_panel);
+    if (ret != ESP_OK) {
+        return record_failure(ret, INDOOR_CAMERA_STATE_RESET_PANEL, "DPI panel reset failed");
+    }
 
     // Reset the DPI panel and pre-fill the frame buffer to white so the user
     // sees a clean handover from "backlight only" to "live video".
-    ESP_RETURN_ON_ERROR(esp_lcd_panel_reset(dpi_panel), TAG, "DPI panel reset failed");
     memset(frame_buffer, 0xFF, FRAME_BUFFER_SIZE);
     esp_cache_msync(frame_buffer, FRAME_BUFFER_SIZE, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
 
-    ESP_RETURN_ON_ERROR(esp_cam_ctlr_start(s_cam_handle), TAG, "csi start failed");
-    ESP_RETURN_ON_ERROR(esp_lcd_panel_init(dpi_panel), TAG, "DPI panel init failed");
+    set_state(INDOOR_CAMERA_STATE_START_CSI);
+    ret = esp_cam_ctlr_start(s_cam_handle);
+    if (ret != ESP_OK) {
+        return record_failure(ret, INDOOR_CAMERA_STATE_START_CSI, "csi start failed");
+    }
 
+    set_state(INDOOR_CAMERA_STATE_INIT_PANEL);
+    ret = esp_lcd_panel_init(dpi_panel);
+    if (ret != ESP_OK) {
+        return record_failure(ret, INDOOR_CAMERA_STATE_INIT_PANEL, "DPI panel init failed");
+    }
+
+    set_state(INDOOR_CAMERA_STATE_ENABLE_BACKLIGHT);
+    ret = init_backlight();
+    if (ret != ESP_OK) {
+        return record_failure(ret, INDOOR_CAMERA_STATE_ENABLE_BACKLIGHT, "backlight init failed");
+    }
+
+    set_state(INDOOR_CAMERA_STATE_START_TASK);
     BaseType_t ok = xTaskCreatePinnedToCore(camera_capture_task, "cam_rx", 4096, NULL, 6, NULL, 0);
     if (ok != pdPASS) {
-        ESP_LOGE(TAG, "failed to create camera capture task");
-        return ESP_ERR_NO_MEM;
+        return record_failure(ESP_ERR_NO_MEM, INDOOR_CAMERA_STATE_START_TASK, "failed to create camera capture task");
     }
 
     s_ready = true;
+    s_last_error = ESP_OK;
+    set_state(INDOOR_CAMERA_STATE_WAITING_FIRST_FRAME);
     ESP_LOGI(TAG, "indoor camera pipeline ready: SC2336 -> CSI -> ISP -> DSI(EK79007)");
     return ESP_OK;
 }
@@ -355,7 +476,7 @@ esp_err_t indoor_camera_capture_get_latest_frame(indoor_camera_frame_t *out_fram
         return ESP_ERR_INVALID_ARG;
     }
     if (!s_ready) {
-        return ESP_ERR_INVALID_STATE;
+        return (s_last_error != ESP_OK) ? s_last_error : ESP_ERR_INVALID_STATE;
     }
 
     portENTER_CRITICAL(&s_frame_lock);
@@ -366,4 +487,39 @@ esp_err_t indoor_camera_capture_get_latest_frame(indoor_camera_frame_t *out_fram
         return ESP_ERR_NOT_FOUND;
     }
     return ESP_OK;
+}
+
+void indoor_camera_capture_get_status(indoor_camera_status_t *out_status)
+{
+    if (out_status == NULL) {
+        return;
+    }
+
+    portENTER_CRITICAL(&s_frame_lock);
+    out_status->state = s_state;
+    out_status->last_error = s_last_error;
+    out_status->ready = s_ready;
+    out_status->first_frame_received = s_first_frame_received;
+    out_status->latest_sequence = s_latest_frame.sequence;
+    portEXIT_CRITICAL(&s_frame_lock);
+}
+
+indoor_camera_state_t indoor_camera_capture_get_state(void)
+{
+    return s_state;
+}
+
+esp_err_t indoor_camera_capture_get_last_error(void)
+{
+    return s_last_error;
+}
+
+bool indoor_camera_capture_has_received_first_frame(void)
+{
+    return s_first_frame_received;
+}
+
+const char *indoor_camera_capture_state_to_string(indoor_camera_state_t state)
+{
+    return state_to_string(state);
 }

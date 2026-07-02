@@ -43,6 +43,7 @@ static const char *TAG = "labguard_device";
 #define SERIAL_COMMAND_BUFFER_BYTES 512
 #define SD_CARD_MOUNT_POINT "/sdcard"
 #define SD_LDO_CHAN_ID 4
+#define MASTER_ON_PUMP_DELAY_MS 300
 
 #if CONFIG_IDF_TARGET_ESP32P4 && CONFIG_ESP_HOSTED_SDIO_HOST_INTERFACE && (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0))
 #define LABGUARD_HOSTED_SDMMC_HOST_INIT 1
@@ -438,6 +439,37 @@ static void apply_command(const labguard_command_t *command)
         publish_status();
         publish_event(LABGUARD_RISK_NORMAL, "manual_light_off", "light_off");
         break;
+    case LABGUARD_CMD_MASTER_ON:
+    {
+        actuator_ctrl_set_fan_level(100);
+        actuator_ctrl_set_fan(true);
+        actuator_ctrl_set_light(true);
+        esp_err_t ret = audio_prompt_play(AUDIO_PROMPT_TOXIC_GAS);
+        vTaskDelay(pdMS_TO_TICKS(MASTER_ON_PUMP_DELAY_MS));
+        actuator_ctrl_set_pump_level(100);
+        actuator_ctrl_set_pump(true);
+        publish_current_risk_state();
+        publish_status();
+        if (ret == ESP_OK) {
+            publish_event(LABGUARD_RISK_ALARM,
+                          "manual_master_on",
+                          "fan_100_light_on_voice_alarm_then_pump_100");
+        } else {
+            publish_event(LABGUARD_RISK_WARNING,
+                          "manual_master_on_partial",
+                          "fan_100_light_on_voice_alarm_failed_then_pump_100");
+            publish_audio_failure_event("manual_master_on_failed", ret);
+        }
+        break;
+    }
+    case LABGUARD_CMD_MASTER_OFF:
+        actuator_ctrl_set_fan(false);
+        actuator_ctrl_set_pump(false);
+        actuator_ctrl_set_light(false);
+        publish_current_risk_state();
+        publish_status();
+        publish_event(LABGUARD_RISK_NORMAL, "manual_master_off", "fan_off_pump_off_light_off");
+        break;
     case LABGUARD_CMD_NONE:
     default:
         break;
@@ -530,27 +562,81 @@ static void device_task(void *arg)
 
     labguard_risk_level_t last_level = LABGUARD_RISK_NORMAL;
     bool logged_missing_frame = false;
+    bool logged_camera_init_failure = false;
+    bool logged_waiting_first_frame = false;
+    bool logged_first_frame_received = false;
 
     while (true) {
         labguard_sensor_data_t sensor = {0};
         labguard_hazard_result_t hazard = {0};
         labguard_risk_state_t risk = {0};
         indoor_camera_frame_t frame = {0};
+        indoor_camera_status_t camera_status = {0};
 
         sensor_reader_read(&sensor);
+        indoor_camera_capture_get_status(&camera_status);
 
         esp_err_t frame_ret = indoor_camera_capture_get_latest_frame(&frame);
         if (frame_ret == ESP_OK) {
+            if (!logged_first_frame_received) {
+                ESP_LOGI(TAG,
+                         "first camera frame received width=%u height=%u sequence=%lu",
+                         (unsigned int)frame.width,
+                         (unsigned int)frame.height,
+                         (unsigned long)frame.sequence);
+                logged_first_frame_received = true;
+            }
             logged_missing_frame = false;
+            logged_camera_init_failure = false;
+            logged_waiting_first_frame = false;
             hazard.smoke = false;
             hazard.flame = false;
             hazard.score_smoke = 0.0f;
             hazard.score_flame = 0.0f;
             hazard.detection_count = 0;
-            hazard.model = "camera_link_only";
+            hazard.model = "camera_streaming";
+        } else if (!camera_status.ready) {
+            logged_missing_frame = false;
+            logged_first_frame_received = false;
+            if (!logged_camera_init_failure) {
+                ESP_LOGW(TAG,
+                         "camera init failed: state=%s error=%s",
+                         indoor_camera_capture_state_to_string(camera_status.state),
+                         esp_err_to_name(camera_status.last_error));
+                logged_camera_init_failure = true;
+            }
+            logged_waiting_first_frame = false;
+            hazard.smoke = false;
+            hazard.flame = false;
+            hazard.score_smoke = 0.0f;
+            hazard.score_flame = 0.0f;
+            hazard.detection_count = 0;
+            hazard.model = "camera_init_failed";
+        } else if (!camera_status.first_frame_received) {
+            logged_missing_frame = false;
+            logged_camera_init_failure = false;
+            logged_first_frame_received = false;
+            if (!logged_waiting_first_frame) {
+                ESP_LOGI(TAG,
+                         "camera waiting for first frame: state=%s",
+                         indoor_camera_capture_state_to_string(camera_status.state));
+                logged_waiting_first_frame = true;
+            }
+            hazard.smoke = false;
+            hazard.flame = false;
+            hazard.score_smoke = 0.0f;
+            hazard.score_flame = 0.0f;
+            hazard.detection_count = 0;
+            hazard.model = "camera_waiting_first_frame";
         } else {
+            logged_camera_init_failure = false;
+            logged_waiting_first_frame = false;
+            logged_first_frame_received = false;
             if (!logged_missing_frame) {
-                ESP_LOGW(TAG, "camera frame unavailable: %s", esp_err_to_name(frame_ret));
+                ESP_LOGW(TAG,
+                         "camera frame unavailable after ready: %s (state=%s)",
+                         esp_err_to_name(frame_ret),
+                         indoor_camera_capture_state_to_string(camera_status.state));
                 logged_missing_frame = true;
             }
             hazard.smoke = false;
@@ -558,7 +644,7 @@ static void device_task(void *arg)
             hazard.score_smoke = 0.0f;
             hazard.score_flame = 0.0f;
             hazard.detection_count = 0;
-            hazard.model = "camera_unavailable";
+            hazard.model = "camera_frame_unavailable";
         }
 
         risk_fusion_evaluate(&sensor, &hazard, &risk);
@@ -587,19 +673,35 @@ static void camera_publish_task(void *arg)
 
     static char preview_json[CAMERA_PREVIEW_JSON_BYTES];
     bool logged_missing_frame = false;
+    bool logged_waiting_first_frame = false;
 
     while (true) {
         indoor_camera_frame_t frame = {0};
+        indoor_camera_status_t camera_status = {0};
+        indoor_camera_capture_get_status(&camera_status);
+
         esp_err_t frame_ret = indoor_camera_capture_get_latest_frame(&frame);
         if (frame_ret == ESP_OK) {
             logged_missing_frame = false;
+            logged_waiting_first_frame = false;
             if (build_camera_preview_json(&frame, preview_json, sizeof(preview_json))) {
                 labguard_net_publish(LABGUARD_TOPIC_DEVICE_CAMERA, preview_json, 0, false);
             } else {
                 ESP_LOGW(TAG, "skip camera preview publish: preview encode failed");
             }
+        } else if (!camera_status.first_frame_received) {
+            logged_missing_frame = false;
+            if (!logged_waiting_first_frame) {
+                ESP_LOGI(TAG,
+                         "camera preview waiting for first frame: state=%s",
+                         indoor_camera_capture_state_to_string(camera_status.state));
+                logged_waiting_first_frame = true;
+            }
         } else if (!logged_missing_frame) {
-            ESP_LOGW(TAG, "camera preview unavailable: %s", esp_err_to_name(frame_ret));
+            ESP_LOGW(TAG,
+                     "camera preview unavailable after ready: %s (state=%s)",
+                     esp_err_to_name(frame_ret),
+                     indoor_camera_capture_state_to_string(camera_status.state));
             logged_missing_frame = true;
         }
 
@@ -633,8 +735,14 @@ void app_main(void)
         .message_cb = net_message_cb,
         .user_ctx = NULL,
     };
-    labguard_net_init(&net_config);
-    labguard_net_start();
+    esp_err_t net_init_ret = labguard_net_init(&net_config);
+    if (net_init_ret != ESP_OK) {
+        ESP_LOGE(TAG, "labguard_net_init failed: %s; continue boot without network", esp_err_to_name(net_init_ret));
+    }
+    esp_err_t net_start_ret = labguard_net_start();
+    if (net_start_ret != ESP_OK) {
+        ESP_LOGE(TAG, "labguard_net_start failed: %s; continue boot without network", esp_err_to_name(net_start_ret));
+    }
     init_sd_card();
 #if CONFIG_LABGUARD_ESPDL_PROBE_ENABLE && CONFIG_LABGUARD_ESPDL_PROBE_RUN_ON_BOOT
     espdl_probe_run_once();
@@ -645,14 +753,26 @@ void app_main(void)
 
     audio_prompt_init();
     sensor_reader_init();
-    indoor_camera_capture_init();
+    esp_err_t camera_ret = indoor_camera_capture_init();
+    if (camera_ret != ESP_OK) {
+        ESP_LOGE(TAG,
+                 "indoor_camera_capture_init failed: %s (state=%s)",
+                 esp_err_to_name(camera_ret),
+                 indoor_camera_capture_state_to_string(indoor_camera_capture_get_state()));
+    }
     risk_fusion_init();
     actuator_ctrl_init();
 
     publish_status();
-    publish_event(LABGUARD_RISK_NORMAL, "device_boot", "camera_sensor_actuator_ready");
+    publish_event(LABGUARD_RISK_NORMAL,
+                  "device_boot",
+                  camera_ret == ESP_OK ? "camera_sensor_actuator_ready" : "camera_init_failed_sensor_actuator_ready");
 
     xTaskCreate(device_task, "device_task", 8192, NULL, 5, NULL);
-    xTaskCreate(camera_publish_task, "camera_publish", 8192, NULL, 4, NULL);
+    if (camera_ret == ESP_OK) {
+        xTaskCreate(camera_publish_task, "camera_publish", 8192, NULL, 4, NULL);
+    } else {
+        ESP_LOGW(TAG, "skip camera_publish task because camera pipeline did not initialize");
+    }
     xTaskCreate(heartbeat_task, "device_heartbeat", 4096, NULL, 4, NULL);
 }

@@ -117,7 +117,7 @@ static bool prompt_file_path(audio_prompt_t prompt, char *path, size_t path_size
                        "%s%s/%s",
                        CONFIG_LABGUARD_AUDIO_PROMPT_SD_MOUNT_POINT,
                        CONFIG_LABGUARD_AUDIO_PROMPT_DIR,
-                       "0004.wav");
+                       "0001_test_loud.wav");
     return len > 0 && (size_t)len < path_size;
 }
 
@@ -625,49 +625,27 @@ static void audio_prompt_loop_task(void *arg)
 {
     (void)arg;
 
-    char (*paths)[AUDIO_PROMPT_PATH_BYTES] = calloc(AUDIO_PROMPT_MAX_LOOP_FILES, AUDIO_PROMPT_PATH_BYTES);
-    if (paths == NULL) {
-        ESP_LOGW(TAG, "audio loop file list allocation failed");
+    char path[AUDIO_PROMPT_PATH_BYTES];
+    if (!prompt_file_path(s_last_prompt, path, sizeof(path))) {
+        ESP_LOGW(TAG, "audio loop prompt path invalid");
         s_loop_enabled = false;
         s_loop_task = NULL;
         vTaskDelete(NULL);
         return;
     }
 
-    ESP_LOGI(TAG,
-             "audio loop started dir=%s%s",
-             CONFIG_LABGUARD_AUDIO_PROMPT_SD_MOUNT_POINT,
-             CONFIG_LABGUARD_AUDIO_PROMPT_DIR);
+    ESP_LOGI(TAG, "audio loop started file=%s", path);
 
     while (s_loop_enabled) {
-        int file_count = scan_audio_files(paths, AUDIO_PROMPT_MAX_LOOP_FILES);
-        if (file_count < 0) {
-            ESP_LOGW(TAG,
-                     "audio directory unavailable: %s%s",
-                     CONFIG_LABGUARD_AUDIO_PROMPT_SD_MOUNT_POINT,
-                     CONFIG_LABGUARD_AUDIO_PROMPT_DIR);
+        esp_err_t ret = audio_prompt_play_path(path, true);
+        if (ret != ESP_OK && s_loop_enabled) {
+            ESP_LOGW(TAG, "audio loop playback failed path=%s: %s", path, esp_err_to_name(ret));
             vTaskDelay(pdMS_TO_TICKS(AUDIO_PROMPT_LOOP_IDLE_MS));
             continue;
         }
-        if (file_count == 0) {
-            ESP_LOGW(TAG,
-                     "no wav files found in %s%s",
-                     CONFIG_LABGUARD_AUDIO_PROMPT_SD_MOUNT_POINT,
-                     CONFIG_LABGUARD_AUDIO_PROMPT_DIR);
-            vTaskDelay(pdMS_TO_TICKS(AUDIO_PROMPT_LOOP_IDLE_MS));
-            continue;
-        }
-
-        for (int i = 0; i < file_count && s_loop_enabled; ++i) {
-            esp_err_t ret = audio_prompt_play_path(paths[i], true);
-            if (ret != ESP_OK && s_loop_enabled) {
-                ESP_LOGW(TAG, "skip wav path=%s: %s", paths[i], esp_err_to_name(ret));
-            }
-            vTaskDelay(pdMS_TO_TICKS(AUDIO_PROMPT_LOOP_BETWEEN_FILES_MS));
-        }
+        vTaskDelay(pdMS_TO_TICKS(AUDIO_PROMPT_LOOP_BETWEEN_FILES_MS));
     }
 
-    free(paths);
     esp_err_t quiet_ret = audio_prompt_quiesce_i2s();
     if (quiet_ret != ESP_OK) {
         ESP_LOGW(TAG, "audio I2S quiesce failed after loop stop: %s", esp_err_to_name(quiet_ret));
@@ -726,22 +704,18 @@ esp_err_t audio_prompt_start_loop(void)
         return ESP_OK;
     }
 
-    char first_path[1][AUDIO_PROMPT_PATH_BYTES];
-    int file_count = scan_audio_files(first_path, 1);
-    if (file_count < 0) {
-        ESP_LOGW(TAG,
-                 "audio loop start failed, directory unavailable: %s%s",
-                 CONFIG_LABGUARD_AUDIO_PROMPT_SD_MOUNT_POINT,
-                 CONFIG_LABGUARD_AUDIO_PROMPT_DIR);
+    char path[AUDIO_PROMPT_PATH_BYTES];
+    if (!prompt_file_path(s_last_prompt, path, sizeof(path))) {
+        ESP_LOGW(TAG, "audio loop start failed, prompt path invalid");
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    FILE *probe = fopen(path, "rb");
+    if (probe == NULL) {
+        ESP_LOGW(TAG, "audio loop start failed, wav missing: %s", path);
         return ESP_ERR_NOT_FOUND;
     }
-    if (file_count == 0) {
-        ESP_LOGW(TAG,
-                 "audio loop start failed, no wav files found in %s%s",
-                 CONFIG_LABGUARD_AUDIO_PROMPT_SD_MOUNT_POINT,
-                 CONFIG_LABGUARD_AUDIO_PROMPT_DIR);
-        return ESP_ERR_NOT_FOUND;
-    }
+    fclose(probe);
 
     s_loop_enabled = true;
     BaseType_t task_ret = xTaskCreate(audio_prompt_loop_task,

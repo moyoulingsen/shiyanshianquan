@@ -32,6 +32,9 @@ static labguard_net_config_t s_config;
 static bool s_wifi_ready;
 static bool s_mqtt_ready;
 static const int s_max_subscriptions = 8;
+#if CONFIG_ESP_HOSTED_ENABLED
+static esp_err_t s_hosted_last_error = ESP_OK;
+#endif
 
 #if CONFIG_ESP_WIFI_ENABLED || CONFIG_ESP_HOST_WIFI_ENABLED || CONFIG_ESP_WIFI_REMOTE_ENABLED
 static esp_mqtt_client_handle_t s_mqtt_client;
@@ -206,6 +209,10 @@ esp_err_t labguard_net_init(const labguard_net_config_t *config)
     s_wifi_ready = false;
     s_mqtt_ready = false;
     memset(s_subscriptions, 0, sizeof(s_subscriptions));
+#if CONFIG_ESP_HOSTED_ENABLED
+    s_hosted_ready = false;
+    s_hosted_last_error = ESP_OK;
+#endif
 
     err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -227,9 +234,23 @@ esp_err_t labguard_net_init(const labguard_net_config_t *config)
 
 #if CONFIG_ESP_HOSTED_ENABLED
         if (!s_hosted_ready) {
-            ESP_ERROR_CHECK(esp_hosted_init());
-            ESP_ERROR_CHECK(esp_hosted_connect_to_slave());
-            s_hosted_ready = true;
+            err = esp_hosted_init();
+            if (err != ESP_OK) {
+                s_hosted_last_error = err;
+                ESP_LOGE(TAG, "esp_hosted_init failed: %s; continue in local-only mode", esp_err_to_name(err));
+            } else {
+                err = esp_hosted_connect_to_slave();
+                if (err != ESP_OK) {
+                    s_hosted_last_error = err;
+                    ESP_LOGE(TAG,
+                             "esp_hosted_connect_to_slave failed: %s; continue in local-only mode",
+                             esp_err_to_name(err));
+                } else {
+                    s_hosted_ready = true;
+                    s_hosted_last_error = ESP_OK;
+                    ESP_LOGI(TAG, "ESP-Hosted slave connected");
+                }
+            }
         }
 #endif
 
@@ -260,6 +281,14 @@ esp_err_t labguard_net_init(const labguard_net_config_t *config)
 esp_err_t labguard_net_start(void)
 {
 #if CONFIG_ESP_WIFI_ENABLED || CONFIG_ESP_HOST_WIFI_ENABLED || CONFIG_ESP_WIFI_REMOTE_ENABLED
+#if CONFIG_ESP_HOSTED_ENABLED && CONFIG_ESP_WIFI_REMOTE_ENABLED
+    if (!s_hosted_ready) {
+        ESP_LOGW(TAG,
+                 "ESP-Hosted slave unavailable (%s); skip Wi-Fi/MQTT startup and continue in local-only mode",
+                 esp_err_to_name(s_hosted_last_error));
+        return ESP_OK;
+    }
+#endif
     if (str_not_empty(s_config.wifi_ssid)) {
         ESP_ERROR_CHECK(esp_wifi_start());
     } else {

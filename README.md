@@ -29,7 +29,8 @@ cd /home/lijiaolong/labguard/shiyanshianquan
 启动成功后终端会打印这些地址，照着填就行：
 
 ```text
-电脑网页端: http://localhost:5173
+电脑网页端: 
+
 Dashboard: http://你的电脑IP:5173
 手机 MQTT WS: ws://你的电脑IP:9001
 板子 MQTT: mqtt://你的电脑IP:1884

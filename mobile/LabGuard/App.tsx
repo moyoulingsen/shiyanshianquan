@@ -24,7 +24,8 @@ import {
   resetDevice,
   toggleAlarm,
   toggleAudio,
-  toggleLight
+  toggleLight,
+  toggleMasterControl
 } from './src/mqtt/client'
 import { useLabguardStore } from './src/state/labguardStore'
 import { formatNumber, formatUptime } from './src/utils/format'
@@ -72,6 +73,7 @@ export default function App() {
   const alarmOn = useLabguardStore((state) => state.alarmOn)
   const audioOn = useLabguardStore((state) => state.audioOn)
   const lightOn = useLabguardStore((state) => state.lightOn)
+  const masterOn = useLabguardStore((state) => state.masterOn)
   const camera = useLabguardStore((state) => state.camera)
   const cameraStateText = useLabguardStore((state) => state.cameraStateText)
   const cameraStale = useLabguardStore((state) => state.cameraStale)
@@ -202,6 +204,9 @@ export default function App() {
             <View style={styles.commandGrid}>
               <Pressable style={[styles.commandButton, styles.resetButton]} onPress={resetDevice}>
                 <Text style={styles.commandButtonText}>重置</Text>
+              </Pressable>
+              <Pressable style={[styles.commandButton, masterOn ? styles.commandButtonOn : styles.commandButtonOff]} onPress={toggleMasterControl}>
+                <Text style={styles.commandButtonText}>总起：{masterOn ? '开启' : '关闭'}</Text>
               </Pressable>
               <Pressable style={[styles.commandButton, audioOn ? styles.commandButtonOn : styles.commandButtonOff]} onPress={toggleAudio}>
                 <Text style={styles.commandButtonText}>声音：{audioOn ? '开启' : '关闭'}</Text>

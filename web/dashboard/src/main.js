@@ -43,6 +43,7 @@ const els = {
   pumpToggle: document.querySelector('#pump-toggle'),
   audioToggle: document.querySelector('#audio-toggle'),
   lightToggle: document.querySelector('#light-toggle'),
+  masterToggle: document.querySelector('#master-toggle'),
   fanSliderPanel: document.querySelector('#fan-slider-panel'),
   pumpSliderPanel: document.querySelector('#pump-slider-panel'),
   fanSlider: document.querySelector('#fan-slider'),
@@ -71,6 +72,8 @@ const actuatorPendingHoldMs = 3000
 
 let audioToggleOn = false
 let lightToggleOn = false
+let masterToggleOn = false
+let masterMq2ForcedAlarm = false
 let socket = null
 let mqttClient = null
 let connectedSource = null
@@ -197,6 +200,11 @@ function setLightToggleState(isOn) {
   updateDemoToggle(els.lightToggle, '灯带', lightToggleOn)
 }
 
+function setMasterToggleState(isOn) {
+  masterToggleOn = Boolean(isOn)
+  updateDemoToggle(els.masterToggle, '总起', masterToggleOn)
+}
+
 function resetLocalControlState() {
   actuatorManualOverride.fan = false
   actuatorManualOverride.pump = false
@@ -206,6 +214,8 @@ function resetLocalControlState() {
   setActuatorState('pump', false, 100, 'off')
   setAudioToggleState(false)
   setLightToggleState(false)
+  setMasterToggleState(false)
+  masterMq2ForcedAlarm = false
 }
 
 function actuatorSourceText(source) {
@@ -349,8 +359,19 @@ function handleMessage(topic, payload) {
     els.temperature.textContent = formatNumber(payload.temperature_c)
     els.humidity.textContent = formatNumber(payload.humidity_rh)
     els.voc.textContent = Number.isFinite(Number(payload.voc_index)) ? String(payload.voc_index) : '--'
-    els.mq2.textContent = payload.mq2_alarm ? '报警' : '正常'
-    els.mq2.className = payload.mq2_alarm ? 'danger-text' : ''
+    const mq2RawMv = Number(payload.mq2_raw_mv)
+    const mq2RawAdc = Number(payload.mq2_raw_adc)
+    const hasMq2Mv = Number.isFinite(mq2RawMv) && mq2RawMv > 0
+    const hasMq2Adc = Number.isFinite(mq2RawAdc) && mq2RawAdc > 0
+    const mq2Alarm = masterMq2ForcedAlarm || Boolean(payload.mq2_alarm)
+    if (hasMq2Mv) {
+      els.mq2.textContent = `${mq2RawMv} mV${mq2Alarm ? '（报警）' : ''}`
+    } else if (hasMq2Adc) {
+      els.mq2.textContent = `${mq2RawAdc} ADC${mq2Alarm ? '（报警）' : ''}`
+    } else {
+      els.mq2.textContent = mq2Alarm ? '报警' : '正常'
+    }
+    els.mq2.className = mq2Alarm ? 'danger-text' : ''
     els.sensorOk.textContent = payload.sensor_ok ? '传感器正常' : '传感器异常'
     els.sensorOk.className = payload.sensor_ok ? 'badge ok' : 'badge warn'
   }
@@ -451,15 +472,6 @@ function connectSelectedSource() {
   }
 }
 
-function fallbackSerialBridgeToMqtt(reason) {
-  if (connectedSource !== 'ws') return
-  els.source.value = 'mqtt'
-  syncSourceFields()
-  localStorage.setItem('labguard.dashboard.source', 'mqtt')
-  setConnection('pending', `${reason}，改用 MQTT...`)
-  connectMqtt()
-}
-
 function connectSerialBridge() {
   disconnect()
   connectedSource = 'ws'
@@ -475,7 +487,6 @@ function connectSerialBridge() {
   socket.addEventListener('error', () => {
     if (connectedSource !== 'ws') return
     setConnection('warn', '本地串口桥连接失败')
-    fallbackSerialBridgeToMqtt('本地串口桥连接失败')
   })
   socket.addEventListener('message', (event) => {
     let frame
@@ -490,7 +501,6 @@ function connectSerialBridge() {
         markTransportConnected(`串口已打开 ${frame.port ?? ''}，等待设备数据...`)
       } else {
         setConnection('warn', frame.message ?? `串口未打开 ${frame.port ?? ''}`)
-        fallbackSerialBridgeToMqtt('本地串口桥未打开串口')
       }
       return
     }
@@ -615,6 +625,66 @@ function toggleLight() {
   handleCommandToggle(lightToggleOn, setLightToggleState, 'light')
 }
 
+function toggleMasterControl() {
+  const nextState = !masterToggleOn
+  setMasterToggleState(nextState)
+
+  if (nextState) {
+    actuatorManualOverride.fan = true
+    actuatorManualOverride.pump = true
+    markActuatorCommandPending('fan')
+    markActuatorCommandPending('pump')
+    setActuatorState('fan', true, 100, 'manual')
+    setActuatorState('pump', true, 100, 'manual')
+    setLightToggleState(true)
+    setAudioToggleState(true)
+    masterMq2ForcedAlarm = true
+    els.mq2.textContent = '报警'
+    els.mq2.className = 'danger-text'
+    if (!sendCommand('master_on')) {
+      clearActuatorCommandPending('fan')
+      clearActuatorCommandPending('pump')
+      setMasterToggleState(false)
+      setActuatorState('fan', false, 100, 'off')
+      setActuatorState('pump', false, 100, 'off')
+      setLightToggleState(false)
+      setAudioToggleState(false)
+      masterMq2ForcedAlarm = false
+      els.mq2.textContent = '--'
+      els.mq2.className = ''
+      setConnection('warn', '命令未发送：请先连接 MQTT 或串口桥')
+    }
+    return
+  }
+
+  actuatorManualOverride.fan = false
+  actuatorManualOverride.pump = false
+  clearActuatorCommandPending('fan')
+  clearActuatorCommandPending('pump')
+  setActuatorState('fan', false, 100, 'off')
+  setActuatorState('pump', false, 100, 'off')
+  setLightToggleState(false)
+  setAudioToggleState(false)
+  masterMq2ForcedAlarm = false
+  els.mq2.textContent = '正常'
+  els.mq2.className = ''
+  if (!sendCommand('master_off')) {
+    actuatorManualOverride.fan = true
+    actuatorManualOverride.pump = true
+    markActuatorCommandPending('fan')
+    markActuatorCommandPending('pump')
+    setMasterToggleState(true)
+    setActuatorState('fan', true, 100, 'manual')
+    setActuatorState('pump', true, 100, 'manual')
+    setLightToggleState(true)
+    setAudioToggleState(true)
+    masterMq2ForcedAlarm = true
+    els.mq2.textContent = '报警'
+    els.mq2.className = 'danger-text'
+    setConnection('warn', '命令未发送：请先连接 MQTT 或串口桥')
+  }
+}
+
 els.cameraPreview.addEventListener('load', flushQueuedCameraFrame)
 els.cameraPreview.addEventListener('error', () => {
   cameraFramePending = false
@@ -660,6 +730,10 @@ els.lightToggle?.addEventListener('click', () => {
   toggleLight()
 })
 
+els.masterToggle?.addEventListener('click', () => {
+  toggleMasterControl()
+})
+
 els.clearLog.addEventListener('click', () => {
   els.log.replaceChildren()
 })
@@ -698,4 +772,5 @@ setActuatorState('fan', false, 100)
 setActuatorState('pump', false, 100)
 setAudioToggleState(false)
 setLightToggleState(false)
+setMasterToggleState(false)
 connectSelectedSource()

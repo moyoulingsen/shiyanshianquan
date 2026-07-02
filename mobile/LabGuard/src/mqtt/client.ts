@@ -389,6 +389,55 @@ export function resetDevice() {
   }
 }
 
+export function toggleMasterControl() {
+  const store = useLabguardStore.getState()
+  const nextOn = !store.masterOn
+  store.setMasterOn(nextOn)
+
+  if (nextOn) {
+    actuatorManualOverride.fan = true
+    actuatorManualOverride.pump = true
+    markActuatorCommandPending('fan')
+    markActuatorCommandPending('pump')
+    store.setActuator('fan', { on: true, level: 100, source: 'manual', manualOn: true, manualOverride: true })
+    store.setActuator('pump', { on: true, level: 100, source: 'manual', manualOn: true, manualOverride: true })
+    store.setLightOn(true)
+    store.setAudioOn(true)
+    if (!sendCommand('master_on')) {
+      clearActuatorCommandPending('fan')
+      clearActuatorCommandPending('pump')
+      actuatorManualOverride.fan = false
+      actuatorManualOverride.pump = false
+      store.setMasterOn(false)
+      store.setActuator('fan', { on: false, level: 100, source: 'off', manualOn: false, manualOverride: false })
+      store.setActuator('pump', { on: false, level: 100, source: 'off', manualOn: false, manualOverride: false })
+      store.setLightOn(false)
+      store.setAudioOn(false)
+    }
+    return
+  }
+
+  actuatorManualOverride.fan = false
+  actuatorManualOverride.pump = false
+  clearActuatorCommandPending('fan')
+  clearActuatorCommandPending('pump')
+  store.setActuator('fan', { on: false, level: 100, source: 'off', manualOn: false, manualOverride: false })
+  store.setActuator('pump', { on: false, level: 100, source: 'off', manualOn: false, manualOverride: false })
+  store.setLightOn(false)
+  store.setAudioOn(false)
+  if (!sendCommand('master_off')) {
+    actuatorManualOverride.fan = true
+    actuatorManualOverride.pump = true
+    markActuatorCommandPending('fan')
+    markActuatorCommandPending('pump')
+    store.setMasterOn(true)
+    store.setActuator('fan', { on: true, level: 100, source: 'manual', manualOn: true, manualOverride: true })
+    store.setActuator('pump', { on: true, level: 100, source: 'manual', manualOn: true, manualOverride: true })
+    store.setLightOn(true)
+    store.setAudioOn(true)
+  }
+}
+
 export function toggleActuator(name: ActuatorName) {
   const store = useLabguardStore.getState()
   const current = store[name]

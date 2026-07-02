@@ -154,6 +154,10 @@ const char *labguard_command_type_to_string(labguard_command_type_t type)
         return "light_on";
     case LABGUARD_CMD_LIGHT_OFF:
         return "light_off";
+    case LABGUARD_CMD_MASTER_ON:
+        return "master_on";
+    case LABGUARD_CMD_MASTER_OFF:
+        return "master_off";
     case LABGUARD_CMD_NONE:
     default:
         return "none";
@@ -199,6 +203,12 @@ labguard_command_type_t labguard_command_type_from_string(const char *type)
     if (strcmp(type, "light_off") == 0) {
         return LABGUARD_CMD_LIGHT_OFF;
     }
+    if (strcmp(type, "master_on") == 0) {
+        return LABGUARD_CMD_MASTER_ON;
+    }
+    if (strcmp(type, "master_off") == 0) {
+        return LABGUARD_CMD_MASTER_OFF;
+    }
     return LABGUARD_CMD_NONE;
 }
 
@@ -243,7 +253,10 @@ char *labguard_sensor_data_to_json(const labguard_sensor_data_t *data)
     cJSON_AddNumberToObject(root, "temperature_raw_c", data->temperature_raw_c);
     cJSON_AddNumberToObject(root, "humidity_raw_rh", data->humidity_raw_rh);
     cJSON_AddNumberToObject(root, "voc_raw_index", data->voc_raw_index);
+    cJSON_AddNumberToObject(root, "mq2_raw_adc", data->mq2_raw_adc);
+    cJSON_AddNumberToObject(root, "mq2_raw_mv", data->mq2_raw_mv);
     cJSON_AddBoolToObject(root, "mq2_alarm", data->mq2_alarm);
+    cJSON_AddBoolToObject(root, "mq2_analog_valid", data->mq2_analog_valid);
     cJSON_AddBoolToObject(root, "sensor_ok", data->sensor_ok);
     cJSON_AddBoolToObject(root, "filtered", data->filtered);
     add_timestamp(root, data->timestamp);
